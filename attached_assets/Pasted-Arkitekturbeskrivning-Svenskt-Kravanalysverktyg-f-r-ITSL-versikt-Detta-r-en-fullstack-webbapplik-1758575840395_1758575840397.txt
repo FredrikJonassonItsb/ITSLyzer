@@ -1,0 +1,802 @@
+Arkitekturbeskrivning: Svenskt Kravanalysverktyg för ITSL
+Översikt
+
+Detta är en fullstack webbapplikation för kravanalys och hantering av upphandlingskrav, utvecklad för ITSL Solutions AB. Applikationen möjliggör import, analys, filtrering och hantering av krav från Excel-filer, med stöd för AI-baserad gruppering av liknande krav, historisk jämförelse och användardefinierad statusspårning.
+
+Applikationen har tre huvudsakliga vyer:
+
+Importera ny fil: Låter användaren importera en ny Excel-fil med krav. Under importen körs en språkmodell (LLM) i bakgrunden för att jämföra kravtexter och kategorier mellan filer. Liknande krav identifieras utifrån textinnehåll och grupperas tillsammans – även om de är märkta som skall-krav eller bör-krav – för att skapa en gemensam kravlista.
+
+Kravsammanställning: Visar en aggregerad lista på krav, organiserad enligt samma kategoriordning som i ursprungsfilerna. En konfigurerbar styrtabell bestämmer ordningen på kategorierna. Klickar man på ett grupperat huvudkrav fälls alla individuella krav ut. Huvudkravet visar sammanfattande information såsom kravtyp (Skall/Bör), eventuella avdrag, historiska kommentarer och svar för kravet i olika upphandlingar. Dessutom visas en övergripande utvecklingsstatus med fält som OK, Under utveckling, Längre fram eller Ej i scope.
+
+Jämförelse: Ger möjlighet att ladda in en ny kravfil för att jämföra mot den befintliga databasen. För varje krav i den inlästa filen visas hur vanligt kravet är (d.v.s. i hur många tidigare upphandlingar det förekommer), vad vi historiskt har svarat på det kravet samt aktuell utvecklingsstatus i systemet.
+
+Systemarkitektur
+Teknisk Stack
+
+Frontend:
+
+React 18 med TypeScript (SPA-arkitektur)
+
+Vite som byggverktyg och utvecklingsserver
+
+Tailwind CSS för styling, tillsammans med komponentbiblioteket shadcn/ui
+
+TanStack Query (React Query) för hantering av serverstate (caching och synkronisering av asynkrona data i React
+npmjs.com
+)
+
+Wouter för klient-side routing (minimalistiskt routerbibliotek baserat på React Hooks
+github.com
+)
+
+React Hook Form för formulär med Zod för validering
+
+Backend:
+
+Node.js med Express.js webbserver
+
+TypeScript för typad backend-utveckling
+
+Drizzle ORM för databashantering (modern, lättvikts TypeScript-ORM med hög typsäkerhet
+github.com
+)
+
+Multer för filuppladdning (Express-middleware för att hantera multipart/form-data, vilket förenklar uppladdning av filer
+blog.logrocket.com
+)
+
+XLSX (SheetJS)-biblioteket för att parsa Excel-filer (möjliggör läs/skriv av kalkylblad i JavaScript-miljö
+docs.sheetjs.com
+)
+
+OpenAI API för AI-analys (används för intelligent gruppering av liknande krav med hjälp av språkmodeller)
+
+Databas & Lagring:
+
+PostgreSQL (Neon serverless database i produktion) – en molnbaserad skalbar Postgres-tjänst
+github.com
+
+In-memory datalagring under utveckling (för enkelhet vid lokalkörning)
+
+Drizzle ORM används för att definiera schema och sköta datatransaktioner mot databasen
+
+Projektstruktur
+root/
+├── client/                          # Frontend React-applikation
+│   ├── src/
+│   │   ├── components/              # React-komponenter
+│   │   │   ├── ui/                  # shadcn/ui komponenter
+│   │   │   ├── ai-grouping-panel.tsx
+│   │   │   ├── category-navigation.tsx
+│   │   │   ├── file-upload.tsx
+│   │   │   ├── import-dialog.tsx
+│   │   │   ├── organization-filter.tsx
+│   │   │   ├── requirements-table.tsx
+│   │   │   ├── search-filters.tsx
+│   │   │   └── statistics-panel.tsx
+│   │   ├── hooks/                   # Anpassade React hooks
+│   │   │   ├── use-mobile.tsx
+│   │   │   └── use-toast.ts
+│   │   ├── lib/                     # Verktygsfunktioner och klientlogik
+│   │   │   ├── queryClient.ts
+│   │   │   ├── types.ts
+│   │   │   └── utils.ts
+│   │   ├── pages/                   # Sidkomponenter
+│   │   │   ├── home.tsx
+│   │   │   └── not-found.tsx
+│   │   ├── App.tsx                  # Huvudkomponent
+│   │   ├── index.css                # Globala stilar
+│   │   └── main.tsx                 # Entrypoint för frontend
+│   └── index.html                   # HTML-template
+├── server/                          # Backend Express-server
+│   ├── ai-analysis.ts               # AI-analyslogik (OpenAI-integration)
+│   ├── index.ts                     # Serverns entrypoint
+│   ├── routes.ts                    # Definiering av API-rutter
+│   ├── storage.ts                   # Lagrings-interface (minne/databas)
+│   └── vite.ts                      # Vite integrering för dev
+├── shared/                         # Delade TypeScript-definitioner
+│   └── schema.ts                   # Datascheman och typer (ORM)
+├── attached_assets/                # Statiska filer och bilagor (t.ex. exempel Excel)
+├── components.json                 # shadcn/ui konfiguration
+├── drizzle.config.ts               # Drizzle ORM databaskonfiguration
+├── package.json                    # Projektberoenden
+├── tailwind.config.ts              # Tailwind CSS konfiguration
+├── tsconfig.json                   # TypeScript konfiguration
+└── vite.config.ts                  # Vite konfiguration
+
+Datamodell (shared/schema.ts)
+Requirements Table Schema
+export const requirements = pgTable("requirements", {
+  id: varchar("id").primaryKey(),
+  text: text("text").notNull(),
+  occurrences: integer("occurrences").notNull().default(0),
+  organizations: json("organizations").$type<string[]>().notNull().default([]),
+  must_count: integer("must_count").notNull().default(0),
+  should_count: integer("should_count").notNull().default(0),
+  fulfilled_yes: integer("fulfilled_yes").notNull().default(0),
+  fulfilled_no: integer("fulfilled_no").notNull().default(0),
+  attachment_required: boolean("attachment_required").notNull().default(false),
+  req_ids: json("req_ids").$type<string[]>().notNull().default([]),
+  categories: json("categories").$type<string[]>().notNull().default([]),
+  procurements: json("procurements").$type<string[]>().notNull().default([]),
+  dates: json("dates").$type<string[]>().notNull().default([]),
+  sample_comment: text("sample_comment").default(""),
+  sample_response: text("sample_response").default(""),
+  user_comment: text("user_comment").default(""),
+  
+  // Utökade fält för förbättrad funktionalitet
+  user_status: varchar("user_status").default("OK"), // OK, Under development, Later, etc.
+  group_id: varchar("group_id"), // För intelligent gruppering av krav
+  group_representative: boolean("group_representative").default(false),
+  similarity_score: integer("similarity_score").default(0),
+  historical_comments: json("historical_comments").$type<string[]>().notNull().default([]),
+  last_seen_date: text("last_seen_date"),
+  first_seen_date: text("first_seen_date"),
+  is_new: boolean("is_new").default(true),
+  category_label: text("category_label"),
+  
+  // Import-hantering
+  import_organization: text("import_organization"), // Organisation för importerad fil (obligatorisk)
+  import_date: text("import_date"),                 // Importdatum
+  requirement_type: text("requirement_type"),       // "Skall" eller "Bör"
+  requirement_category: text("requirement_category")// Kategori från Excel-rubriker
+});
+
+Typer och scheman
+export type Requirement = typeof requirements.$inferSelect;
+export type InsertRequirement = typeof requirements.$inferInsert;
+
+// Schema för filtreringsalternativ
+export const filterSchema = z.object({
+  searchQuery: z.string().optional(),
+  requirementTypes: z.array(z.enum(["Skall", "Bör", "all"])).optional(),
+  organizations: z.array(z.string()).optional(),
+  categories: z.array(z.string()).optional(),
+  dates: z.array(z.string()).optional(),
+  userStatus: z.array(z.enum(["OK", "During development", "Later", "all"])).optional(),
+  showOnlyNew: z.boolean().optional(),
+  showGrouped: z.boolean().optional(),
+});
+
+// Schema för statistik
+export const statisticsSchema = z.object({
+  totalRequirements: z.number(),
+  mustRequirements: z.number(),
+  shouldRequirements: z.number(),
+  organizations: z.number(),
+  groups: z.number(),
+  newRequirements: z.number(),
+  categories: z.array(z.object({
+    name: z.string(),
+    count: z.number(),
+  })),
+  organizationStats: z.array(z.object({
+    name: z.string(),
+    count: z.number(),
+  })),
+  statusStats: z.array(z.object({
+    status: z.string(),
+    count: z.number(),
+  })),
+});
+
+Backend-arkitektur (Server)
+Express-server konfiguration (server/index.ts)
+import express from "express";
+import { registerRoutes } from "./routes";
+import { setupVite, serveStatic } from "./vite";
+
+const app = express();
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: false, limit: '100mb' }));
+
+// Servera statiska filer från attached_assets
+app.use('/attached_assets', express.static('attached_assets'));
+
+// Enkel loggning middleware
+app.use((req, res, next) => {
+  // API-förfrågningsloggning kan implementeras här
+  next();
+});
+
+// Registrera API-rutter
+const server = await registerRoutes(app);
+
+// Vite dev-server eller statiska filer beroende på miljö
+if (app.get("env") === "development") {
+  await setupVite(app, server);
+} else {
+  serveStatic(app);
+}
+
+const port = parseInt(process.env.PORT || '5000', 10);
+server.listen({ port, host: "0.0.0.0", reusePort: true });
+
+API-rutter (server/routes.ts)
+
+Huvudrutter:
+
+GET /api/requirements – Hämta lista över krav med stöd för filtrering och paginering.
+
+GET /api/statistics – Hämta aggregerad statistik om kravdatabasen.
+
+GET /api/search – Fulltextsökning bland alla krav.
+
+PATCH /api/requirements/:id/comment – Uppdatera användarkommentar för ett givet krav.
+
+PATCH /api/requirements/:id/status – Uppdatera användarstatus (t.ex. utvecklingsstatus) för ett krav.
+
+POST /api/ai/group-requirements – Utför AI-baserad gruppering av liknande krav (anropar OpenAI-analys).
+
+POST /api/upload-excel – Importera en Excel-fil med krav. Utför parsing och normalisering av data.
+
+GET /api/export – Exportera all kravdata som JSON.
+
+Excel-import logik (utdrag):
+
+// Normalisering av text (för jämförelser)
+const normalizeText = (text: string): string => {
+  return text.toLowerCase()
+    .replace(/ä/g, 'a')
+    .replace(/å/g, 'a') 
+    .replace(/ö/g, 'o')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+// Detektera kravtyp ("Skall" vs "Bör") utifrån text
+const detectRequirementType = (
+    typeValue: string, 
+    isFromTypeColumn: boolean = false
+  ): 'Skall' | 'Bör' | null => {
+
+  const normalized = normalizeText(typeValue);
+  const trimmed = normalized.trim();
+  
+  // Kolla efter enkelbokstavskoder om värdet kommer från typ-kolumn
+  if (isFromTypeColumn && (trimmed === 's' || trimmed === 'skall' || trimmed === 'ska')) {
+    return 'Skall';
+  }
+  if (isFromTypeColumn && (trimmed === 'b' || trimmed === 'bor')) {
+    return 'Bör';
+  }
+  
+  // Vanliga texter som indikerar "Skall"
+  if (/\b(ska|skall|obligatorisk|obligatoriskt|måste|must)\b/.test(normalized)) {
+    return 'Skall';
+  }
+  // Vanliga texter som indikerar "Bör"
+  if (/\b(bor|rekommenderas|should)\b/.test(normalized)) {
+    return 'Bör';
+  }
+  return null;
+};
+
+Lagringsinterface (server/storage.ts)
+
+Applikationen använder ett abstrakt storage-interface som har stöd för olika lagringsbackends (in-memory för dev, PostgreSQL för prod). Interfacet definierar bl.a.:
+
+export interface IStorage {
+  getAllRequirements(): Promise<Requirement[]>;
+  getRequirement(id: string): Promise<Requirement | undefined>;
+  createRequirement(req: InsertRequirement): Promise<Requirement>;
+  updateRequirement(id: string, updates: Partial<Requirement>): Promise<Requirement | undefined>;
+  deleteRequirement(id: string): Promise<boolean>;
+  bulkCreateRequirements(reqs: InsertRequirement[]): Promise<Requirement[]>;
+  getFilteredRequirements(filters: FilterOptions, page?: number, pageSize?: number): Promise<{
+    requirements: Requirement[];
+    total: number;
+  }>;
+  getStatistics(): Promise<Statistics>;
+  searchRequirements(query: string): Promise<Requirement[]>;
+  updateComment(id: string, comment: string): Promise<Requirement | undefined>;
+  updateStatus(id: string, status: string): Promise<Requirement | undefined>;
+  applyGrouping(groups: RequirementGroup[]): Promise<void>;
+  getGroupMembers(groupId: string): Promise<Requirement[]>;
+  compareWithHistorical(newReqs: Requirement[]): Promise<ComparisonResult[]>;
+}
+
+
+(Ovan är ett urval av viktiga metoder i IStorage interfacet.)
+
+Frontend-arkitektur (Client)
+App-struktur (client/src/App.tsx)
+import { Switch, Route } from "wouter";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./lib/queryClient";
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Switch>
+          <Route path="/" component={Home} />
+          <Route component={NotFound} />
+        </Switch>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+}
+
+
+(Kommentar: Applikationen använder Wouter för routing istället för React Router, där <Switch> och <Route> kommer från Wouter-paketet.)
+
+Query Client Setup (client/src/lib/queryClient.ts)
+import { QueryClient } from "@tanstack/react-query";
+
+export async function apiRequest(
+  method: string,
+  url: string,
+  data?: unknown,
+): Promise<Response> {
+  const res = await fetch(url, {
+    method,
+    headers: data ? { "Content-Type": "application/json" } : {},
+    body: data ? JSON.stringify(data) : undefined,
+    credentials: "include",
+  });
+  
+  if (!res.ok) {
+    const text = (await res.text()) || res.statusText;
+    throw new Error(`${res.status}: ${text}`);
+  }
+  return res;
+}
+
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryFn: async ({ queryKey }) => {
+        const res = await fetch(queryKey.join("/") as string, {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error(res.statusText);
+        return await res.json();
+      },
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
+      staleTime: Infinity,
+      retry: false,
+    },
+  },
+});
+
+Huvudkomponenter och vyer
+
+Det finns ett antal viktiga React-komponenter som bygger upp appens funktionalitet och gränssnitt:
+
+Home Page (pages/home.tsx): Huvudsidan som agerar nav för applikationen. Här hanteras övergripande state såsom filtreringsval, aktiv vy och paginering. Home-komponenten komponerar ihop de andra komponenterna (filtrering, kravtabell, statistikpanel m.m.) och dirigerar användaren mellan de tre huvudvyerna (import, sammanställning, jämförelse).
+
+Requirements Table (components/requirements-table.tsx): Visar den aggregerade listan av krav i tabellform. Stöder expanderbara rader (klick på ett huvudkrav visar underliggande krav), in-line redigering av kommentarer, uppdatering av status och sortering/paginering. Tabellen följer den kategoriordning som definierats och använder data-testid-attribut för testbarhet.
+
+Import Dialog (components/import-dialog.tsx): En dialog/modal för att ladda upp en ny Excel-fil. Innehåller formulärfält för obligatoriska metadata (organisation, datum för upphandling etc.) samt filval via drag-and-drop. Formuläret använder React Hook Form med Zod för validering (t.ex. endast .xlsx accepteras, max filstorlek 50 MB). Vid submit skickas filen till backend /api/upload-excel och triggervär LLM-gruppering.
+
+File Upload (components/file-upload.tsx): En underkomponent som hanterar själva drag-and-drop funktionen för filuppladdning. Har både drag-and-drop-yta och dold input för att stödja keyboard navigation. Visar filnamn och storlek efter att en fil valts, samt hanterar fel (ogiltig filtyp, för stor fil etc.).
+
+Filtering Components: Flera små komponenter för filtrering av visade krav:
+
+SearchFilters (components/search-filters.tsx): Textruta för fritextsökning bland krav samt checkboxar för filtrering på kravtyp (Skall/Bör).
+
+OrganizationFilter (components/organization-filter.tsx): Dropdown eller lista för att filtrera krav baserat på ursprungsorganisation (upphandling).
+
+CategoryNavigation (components/category-navigation.tsx): En meny/översikt av kategorier (kapitel) som gör att användaren kan hoppa till en viss kategori i kravtabellen.
+
+AI Grouping Panel (components/ai-grouping-panel.tsx): Visar resultat från AI-baserad gruppering. När nya krav importeras eller när man manuellt triggar gruppering, visas här vilka krav som grupperats ihop och med vilken likhetspoäng. Ger användaren möjlighet att justera grupperingarna innan de sparas.
+
+Statistics Panel (components/statistics-panel.tsx): Visar sammanfattande statistik och nyckeltal för kravdatabasen. Exempelvis totalt antal unika krav, antal skall-krav vs bör-krav, antal organisationer (upphandlingar) som ingår, antal grupperade kluster, antal nya krav (som bara förekommer i senaste importen), m.m. Denna panel kan även innehålla enklare visualiseringar (staplar eller cirkeldiagram) för t.ex. fördelning av krav per kategori eller status.
+
+(Alla komponenter ovan är byggda med återanvändning och tillgänglighet i åtanke – t.ex. stöd för tangentbordsnavigering, ARIA-attribut och tydliga statusmeddelanden för skärmuppläsare där det är relevant.)
+
+Konfiguration och setup
+1. Package.json Dependencies
+
+I package.json listas alla beroenden. Nedan är ett utdrag över viktiga paket:
+
+Produktion (dependencies):
+
+{
+  "@hookform/resolvers": "^3.10.0",
+  "@neondatabase/serverless": "^0.10.4",
+  "@radix-ui/react-*": "0.3.x",
+  "@tanstack/react-query": "^5.60.5",
+  "drizzle-orm": "^0.39.1",
+  "drizzle-zod": "^0.7.0",
+  "express": "^4.21.2",
+  "multer": "^2.0.2",
+  "openai": "^5.22.0",
+  "react": "^18.3.1",
+  "react-hook-form": "^7.55.0",
+  "tailwindcss": "^3.4.17",
+  "wouter": "^3.3.5",
+  "xlsx": "^0.18.5",
+  "zod": "^3.24.2"
+}
+
+
+Utveckling (devDependencies):
+
+{
+  "@replit/vite-plugin-*": "...",            // Replit-specifika plugins
+  "@types/*": "...",                        // TypeScript-typer
+  "@vitejs/plugin-react": "^4.7.0",
+  "drizzle-kit": "^0.31.4",
+  "tsx": "^4.20.5",
+  "typescript": "5.6.3",
+  "vite": "^5.4.20"
+}
+
+
+(Kommentar: Versionerna återspeglar sen 2025-status för respektive bibliotek. I synnerhet TanStack React Query v5 används, vilket är den vidareutvecklade versionen av React Query.)
+
+2. Vite Configuration (vite.config.ts)
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { runtimeErrorOverlay } from "@replit/vite-plugin-runtime-error-overlay";
+import path from "path";
+
+export default defineConfig({
+  plugins: [
+    react(),
+    runtimeErrorOverlay(),
+    // Eventuella Replit-specifika plugins för utvecklingsmiljön
+  ],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "client", "src"),
+      "@shared": path.resolve(__dirname, "shared"),
+      "@assets": path.resolve(__dirname, "attached_assets"),
+    },
+  },
+  root: path.resolve(__dirname, "client"),
+  build: {
+    outDir: path.resolve(__dirname, "dist/public"),
+    emptyOutDir: true,
+  },
+});
+
+
+(Notera hur Vite-konfigurationen sätter upp alias för enklare importer, t.ex. @/ för klientkoden och @shared/ för delade typer.)
+
+3. Tailwind Configuration (tailwind.config.ts)
+export default {
+  darkMode: ["class"],
+  content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
+  theme: {
+    extend: {
+      colors: {
+        background: "var(--background)",
+        foreground: "var(--foreground)",
+        // ...shadcn/ui färgsystemvariabler...
+      },
+    },
+  },
+  plugins: [
+    require("tailwindcss-animate"),
+    require("@tailwindcss/typography")
+  ],
+};
+
+
+(Konfigurationen aktiverar mörkerläge via klasser och inkluderar Tailwinds plugin för animationer och typografi. Färgtemat baseras på CSS-variabler, vilket shadcn/ui använder för att tema komponenter.)
+
+4. TypeScript Configuration (tsconfig.json)
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./client/src/*"],
+      "@shared/*": ["./shared/*"]
+    }
+  }
+}
+
+
+(Här ser vi att TypeScript är konfigurerat för att vara sträng med fel, och vi har satt upp aliassen @ och @shared i linje med Vite för att underlätta importvägar i koden.)
+
+5. Drizzle Configuration (drizzle.config.ts)
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  schema: "./shared/schema.ts",
+  out: "./migrations",
+  dialect: "postgresql",
+  dbCredentials: {
+    url: process.env.DATABASE_URL!,
+  },
+});
+
+
+(Drizzle Kit används för att generera och köra migrationer. Konfigurationen pekar ut vårt schema samt var migrationsfiler ska hamna. process.env.DATABASE_URL förväntas innehålla anslutningssträngen till Neon/Postgres.)
+
+Miljövariabler och hemligheter
+
+Applikationen använder ett antal miljövariabler för att hantera nycklar och konfiguration:
+
+# OpenAI API-nyckel för AI-integration
+OPENAI_API_KEY="sk-..."       # (din hemliga OpenAI-nyckel)
+
+# Databasanslutning (produktion)
+DATABASE_URL="postgresql://<user>:<password>@<host>/<database>"
+
+# Sessionshantering (om inloggning/autentisering införs)
+SESSION_SECRET="random-secure-string"
+
+# Övrigt
+NODE_ENV="development"        # eller "production"
+PORT=5000                     # Port som servern lyssnar på
+
+
+(OBS: I utvecklingsmiljö används in-memory datalagring, så DATABASE_URL kan utelämnas eller sättas till en lokal databas. SESSION_SECRET behövs endast om sessionsbaserad auth skulle införas.)
+
+Byggprocess och deployment
+
+Utvecklingskörning:
+
+npm run dev
+
+
+Detta startar både Express-backend och Vite-devservern (via ett script som sätter NODE_ENV=development och kör tsx server/index.ts). Applikationen blir tillgänglig på http://localhost:5000 med Vite som proxyar frontend-resurserna.
+
+Bygga för produktion:
+
+npm run build
+
+
+Build-skriptet kör vite build för frontend och bundlar sedan serverkoden (t.ex. via esbuild) till dist/. Resultatet blir en statisk mapp dist/public för frontend och en kompilerad dist/index.js för servern.
+
+Starta produktion:
+
+npm start
+
+
+Detta kör den bundlade Node.js-servern (NODE_ENV=production node dist/index.js). I produktionsläge serverar Express de byggda frontend-filerna statiskt (via serveStatic(app) i koden ovan).
+
+(Notera: Neon-databasen behöver vara skapad och DATABASE_URL satt korrekt i miljön vid deploy.)
+
+Säkerhetsimplementering
+1. Inputvalidering
+
+Validering med Zod: All inkommande data (t.ex. filtreringsparametrar, formulär för import) valideras mot schemas definierade med Zod. Detta förhindrar felaktig data och förenklar felhantering.
+
+Sanitering av Excel-data: Vid import trimmas och normaliseras text (t.ex. genom normalizeText-funktionen ovan) för att undvika inkonsekvenser p.g.a. stora/små bokstäver eller specialtecken.
+
+Begränsning av payload-storlek: Express är konfigurerad med limit: '100mb' för JSON och URL-encoded data, så att API:et inte tar emot orimligt stora payloads.
+
+2. Filuppladdningssäkerhet
+
+Filtypskontroll: Endast Excel-filer (.xlsx) accepteras av import-endpointen. Filuppladdningskomponenten på frontend hindrar användaren från att välja andra filtyper.
+
+Storleksbegränsning: Maximal filstorlek är satt (t.ex. 50 MB) för att förhindra överbelastning.
+
+Ingen skrivning till disk: Multer är konfigurerad att lagra filen i minnet (buffer) istället för på serverns disk, för att minimera risker och underlätta vidare parsing direkt i Node.
+
+3. API-säkerhet
+
+CORS & same-site: Applikationen antas i första hand användas internt, men är konfigurerad så att cookies (om några) skickas med (credentials: include i fetch). CORS kan begränsas till betrodda origin vid behov.
+
+Felhantering: API:et fångar upp oväntade fel och skickar generiska felmeddelanden utan att läcka stacktraces eller känslig info.
+
+Skydd mot bottar/brute force: För en intern app är detta mindre kritiskt, men rate limiting kan införas på t.ex. import-endpointen för säkerhets skull.
+
+Autentisering (framtida): Kodbasen är förberedd för att införa sessionsbaserad auth (se SESSION_SECRET). Detta skulle ge möjlighet att skydda API:et bakom inloggning om så önskas.
+
+Testning och tillgänglighet
+Teststrategi
+
+Enhetstester/databas: Då Drizzle ORM ger typade resultat kan kritiska funktioner (t.ex. kravgruppering, filtrering) testas med enhetstester mot en testdatabas eller in-memory storage.
+
+Integrationstester: API-rutterna kan testas med verktyg som Supertest för att säkerställa att end-to-end-flödet (import -> lagring -> fetch) fungerar.
+
+Frontend test (manual/automatiserad): Applikationen har data-testid-attribut på alla interaktiva element enligt mönstret {action}-{target} (för knappar o.dyl.) och {type}-{content} (för statisk text), vilket underlättar selektor-baserade tester med t.ex. Playwright eller Cypress.
+
+Testdata: I utvecklingsläge kan man ladda in exempelkravfiler (bilagor) för att manuellt testa gruppering och filtrering.
+
+Tillgänglighetsfunktioner (Accessibility)
+
+Tangentbordsnavigering: Alla delar av gränssnittet kan nås och användas med tangentbord (t.ex. genom att Tab-ordningen är logisk, och att dialoger/fokus hanteras korrekt).
+
+ARIA-labels: Interaktiva komponenter (särskilt ikonknappar eller custom components) har ARIA-etiketter och roller där det behövs för att skärmuppläsare ska beskriva dem korrekt.
+
+Kontrast och tema: Designen följer WCAG vad gäller kontrast. Med Tailwind + shadcn/ui är det lätt att växla tema (mörkt/ljust) och ändå behålla god kontrast.
+
+Responsiv design: Mobilanvändare tillgodoses genom att komponenterna är flexibla och anpassar sig till mindre skärmar (t.ex. genom att sidomenyer blir hopfällbara, tabeller är scrollbara på x-led, etc.).
+
+Feedback till användaren: Alla asynkrona handlingar (import, AI-gruppering, save) ger tydlig feedback – t.ex. spinner vid pågående operation och toast-notifieringar (via <Toaster /> komponenten) vid success/fel.
+
+AI-integration och intelligenta funktioner
+OpenAI-integration
+
+LLM för kravgruppering: Backend-modulen ai-analysis.ts använder OpenAIs API (t.ex. GPT-4) för att analysera kravtexter. Genom att skicka in batchar av kravbeskrivningar kan modellen bedöma textlikhet eller föreslå gruppering/kluster.
+
+Automatisk taggning: I framtiden kan modellen även användas för att auto-tagga krav (t.ex. identifiera om ett krav handlar om säkerhet, prestanda, användbarhet etc.) för ytterligare kategorisering utöver de befintliga.
+
+Naturligt språk-sökning: /api/search-endpointen kan använda OpenAI (eller liknande NLP-modeller) för att tillåta mer intelligent sökning, t.ex. att hitta relevanta krav även om orden inte exakt matchar (semantic search).
+
+Intelligenta funktioner
+
+Kravtyp-detektion: Som visat i kodexemplet ovan försöker systemet automatiskt klassificera krav till "Skall" vs "Bör" baserat på nyckelord, om inte en explicit kolumn för detta finns i Excel. Detta minskar behovet av manuellt arbete vid import.
+
+Historisk jämförelse: Funktionen för att jämföra en ny kravlista med historiska data använder en kombination av direkt textjämförelse (normaliserad strängmatchning) och AI-hjälp för att hitta krav som är snarlika trots olik ordalydelse. Resultatet visar sannolikhetsmatchningar och tidigare förekomst.
+
+Duplicate detection: Vid import kan systemet flagga om ett nytt krav redan existerar (exakt match) i databasen och då markera det som icke-nytt. För nästan dubbletter används likhetsmått (e.g. Jaccard index eller embeddings-jämförelser via AI) för att föreslå gruppering.
+
+Förslag på svar: Fält som sample_response och sample_comment kan automatiskt fyllas med exempel från historiken (eller i framtiden genereras med AI) för att ge användaren en utgångspunkt baserat på hur liknande krav hanterats tidigare.
+
+Dataflöde och state management
+Client state
+
+React Query (TanStack Query): Nästan all datahämtning sker via React Query. Detta innebär att kravlistor, statistik m.m. hämtas med GET-requests och cachen hålls uppdaterad. Vi använder staleTime: Infinity och manuell invalidation för att ha realtidskänsla utan onödiga refetches.
+
+Lokal komponentstate: För UI-tillstånd (som om en dialog är öppen, aktuellt valt filter, etc.) används vanliga React useState eller useReducer hooks. Dessa återställs/laddas om vid navigering om nödvändigt.
+
+Optimistic updates: Vid PATCH (t.ex. uppdatera en kommentar eller status) kan frontend uppdatera lokalt direkt för att ge snabb respons, och sedan bekräftas serverns svar. Misslyckas serveruppdatering rullas ändringen tillbaka och ett felmeddelande visas.
+
+Server state
+
+In-memory vs persistent: I dev-mode ligger all data i en in-memory struktur (t.ex. en Map eller Array som implementerar IStorage). I produktion används PostgreSQL via Drizzle. Genom att hålla sig till IStorage-interfacet kan båda fungera likadant för resten av appen.
+
+Caching på serversidan: Ingen tung caching är införd på servern (eftersom React Query och databasen hanterar det mesta). Dock skulle man kunna cacha resultat av t.ex. AI-analyser eller statistik om de är dyra att räkna ut.
+
+Sessions: Om autentisering införs skulle servern hantera sessioner (t.ex. med express-session eller JWT), men i nuläget är det öppet.
+
+Datasynkronisering
+
+Efter import/ändringar: Varje gång användaren importerar en ny fil eller ändrar något, triggas en invalidation av relevant cache på frontend. T.ex. efter en ny import invalidater vi /api/requirements-cachen så att tabellen refetchar nya datan.
+
+Websockets (framtida): För realtidsuppdateringar (t.ex. om flera användare samarbetar) kan man införa websockets eller SSE. Arkitekturen stödjer detta då frontend-state mestadels ligger i React Query – ett inkommande meddelande om ändring kan då uppdatera cachen.
+
+Export synk: Vid export (GET /api/export) hämtas en färsk snapshot av all data. Denna påverkas inte av klientens filtrering utan ger alltid allt.
+
+Användargränssnitt och UX
+Designspråk och komponenter
+
+shadcn/ui + Tailwind: Projektet använder shadcn/ui-komponenter (byggda på Radix UI) vilket ger tillgängliga och stilrena bas-komponenter. Dessa är integrerade med Tailwind CSS för enkel anpassning.
+
+Konsekvent tema: Genom att använda ett centralt färgtema (CSS-variabler för --background, --foreground etc.) hålls utseendet konsekvent. Alla egna komponenter följer samma typografi- och spacing-regler för en enhetlig känsla.
+
+Ikoner och grafik: Där det behövs ikoner (t.ex. för att indikera en fil, en kommentar, expand/collapse av rad), används ett ikonbibliotek eller Radix Icons för enhetlighet. Ikoner har hjälpetext/ARIA för att beskrivas av skärmläsare.
+
+Responsiv design
+
+Mobil och desktop: Gränssnittet är byggt mobil-först. På smala skärmar visas filtreringsmenyer och sidpaneler som skjutbara drawer-menyer eller modaler. Tabeller och paneler staplas vertikalt. På bredare skärmar visas de sida vid sida för bättre överblick.
+
+Flexibla layouter: CSS Grid och Flexbox används för att anpassa layouten efter tillgängligt utrymme. T.ex. statistikpanelen kan visas bredvid kravtabellen på stor skärm, men hopfälld i en egen vy på mobil.
+
+Touchvänligt: Knappar och interaktioner är dimensionerade för touch (minst ~44px höga), så att även surfplatte- eller mobilanvändare lätt kan trycka rätt.
+
+Användarupplevelse
+
+Laddningstillstånd: Vid alla datahämtningar visas tydliga laddningsindikatorer (t.ex. en spinner overlay på tabellen vid första load, eller skelettkomponenter). Detta förhindrar att användaren ser tomma ytor utan förklaring.
+
+Notifikationer: Systemet ger feedback på användaråtgärder via toast-notiser. T.ex. "Import lyckades – 120 krav inlästa." eller "Kommentar sparad". Vid fel ges ett avvikande meddelande (gärna med förslag, t.ex. "Import misslyckades: Ogiltig filformat. Försök igen med en .xlsx-fil.").
+
+Undo-möjlighet: För vissa ändringar (som att ändra status eller kommentar) kan ett ångra-meddelande visas i toast för att snabbt återställa om användaren ångrade sig.
+
+Progress indication: Vid långa AI-beräkningar (gruppering) kan en progress-bar eller meddelande visas, eventuellt med skriven status ("Analyserar krav 37 av 120...") för transparens.
+
+Felhantering: Om något oväntat inträffar (t.ex. servern tappar kontakt med databasen) visas ett användarvänligt felmeddelande och ev. en prompt att försöka igen. Applikationen fångar upp fel globalt (t.ex. en <ErrorBoundary> kan användas runt huvudkomponenter) för att inte visa stacktraces.
+
+Återskapa applikationen – steg-för-steg
+
+(Denna guide beskriver hur man skulle gå tillväga för att bygga upp projektet från scratch, baserat på arkitekturen ovan.)
+
+1. Initial setup
+
+Skapa en projektmapp och initiera npm:
+
+mkdir kravanalys-itsl && cd kravanalys-itsl
+npm init -y
+
+
+Installera alla nödvändiga paket:
+
+# Installera produktionsberoenden
+npm install react react-dom express typescript tailwindcss @vitejs/plugin-react vite \
+            @tanstack/react-query wouter react-hook-form zod drizzle-orm drizzle-zod \
+            @hookform/resolvers multer openai xlsx @radix-ui/react-tooltip @radix-ui/react-dialog \
+            @neondatabase/serverless
+
+# Installera dev-dependencies
+npm install -D typescript tsx drizzle-kit @types/express @types/node @types/react \
+               @types/react-dom @types/wouter @types/react-hook-form @types/multer
+
+
+(Ovanstående är ett urval; exakta versioner enligt package.json tidigare.)
+
+2. Skapa projektstruktur
+
+Skapa mappstrukturen enligt beskrivningen:
+
+mkdir -p client/src/{components/hooks/lib/pages} 
+mkdir -p client/src/components/ui 
+mkdir server shared attached_assets
+
+
+Lägg in grundfiler såsom client/index.html, samt stubbar för App.tsx, index.tsx, server/index.ts, etc.
+
+3. Setup konfigurationsfiler
+
+Skapa konfigurationsfiler för Vite, Tailwind, TypeScript och Drizzle:
+
+vite.config.ts: enligt ovan med alias och root.
+
+tailwind.config.ts: enligt ovan, pekande ut alla källfiler.
+
+tsconfig.json: enligt ovan, se till att inkludera både klient- och serverkod i kompileringen.
+
+drizzle.config.ts: med korrekt schema-sökväg och DATABASE_URL från env.
+
+Kör npx tailwindcss init för att generera en grundläggande Tailwind-config om det behövs, och uppdatera med custom settings enligt ovan.
+
+4. Implementera backend
+
+Börja med att definiera shared/schema.ts med Drizzle ORM-tabellen requirements och tillhörande typer.
+
+Implementera server/storage.ts med två varianter: en InMemoryStorage (som implementerar IStorage interfacet med en lokal array/map) och en DatabaseStorage (som använder Drizzle ORM för att prata med Postgres).
+
+Skriv server/routes.ts för att hantera API-logiken: läs in JSON, anropa storage-metoder, returnera resultat. Här inkluderas logiken för filtrering (tolka queryparams och använd IStorage.getFilteredRequirements), samt hantera filuppladdning.
+
+I server/ai-analysis.ts, konfigurera OpenAI API-klienten och skriv funktioner som groupRequirements(reqs: Requirement[]): RequirementGroup[] som anropar OpenAI och beräknar likheter/cluster.
+
+Sätt upp server/index.ts med Express-initiering (CORS om behövs), body-parser limits, mounta static files, registrera routes och starta servern.
+
+Testa backend med t.ex. tsx server/index.ts och cURL mot några endpoints (eller använd en REST-client) för att se att det fungerar innan vidare steg.
+
+5. Implementera frontend
+
+Börja med App och routing: använd Wouter <Switch> och <Route> för Home och ev. NotFound.
+
+Bygg Home Page (pages/home.tsx): inkludera filtreringskomponenter, import-knapp/dialog, statistikpanel och kravtabell. Använd React Query hooks (useQuery) för att hämta /api/requirements och /api/statistics.
+
+Implementera RequirementsTable: ta emot props för lista av krav och rendera i en <table> eller liknande. Lägg till möjligheten att en rad expanderas (håll koll på en state expandedRowId t.ex.). Inuti expanderad del, visa detaljer för varje enskilt krav (t.ex. med map över grupplistan).
+
+Implementera ImportDialog: använd React Hook Form för formuläret. Vid submit, posta filen via fetch (/api/upload-excel). Visa loading-state under uppladdning. När klart, stäng dialog och eventuellt visa en sammanfattning ("X krav inlästa").
+
+Implementera FileUpload: hantera dragenter/leave events, och ett dolt <input type="file"> för klick-upload. Se till att komponenten anropar RHF's register så att filen fångas upp som formvärde.
+
+Implementera Filters komponenter: varje bör påverka en global filter-state i Home (alternativt Context). Dessa filtervärden kan användas för att anropa /api/requirements med queryparams, eller filtrera klient-side beroende på designval.
+
+AIGroupingPanel: bygg en panel som kan visa grupper (kanske en lista där varje grupp har representativ kravtext och en lista på ingående krav). Lägg till en knapp "Apply grouping" som kallar ett API (t.ex. /api/ai/group-requirements för att spara grupperingarna i databasen).
+
+StatisticsPanel: använd /api/statistics datan för att rendera siffrorna. Kan använda t.ex. <ul> med listitems för varje kategori-statistik etc., eller mer avancerat en grafbibliotek om så önskas (men text-baserat är okej initialt).
+
+Kör npm run dev och testa applikationen i webbläsaren under utveckling. Justera styling (Tailwind classes) allteftersom så att allt ser bra ut.
+
+6. Sätt upp databas (för produktionstest)
+
+Skapa en Neon Postgres instans och sätt DATABASE_URL.
+
+Kör Drizzle migrations: npx drizzle-kit generate:pg för att generera migration från schema, och sedan npx drizzle-kit push:pg för att applicera den på Neon.
+
+Ändra servern att använda DatabaseStorage istället för InMemory när NODE_ENV är production.
+
+Verifiera genom att köra NODE_ENV=production tsx server/index.ts lokalt med riktig DB – importera några filer och se att de dyker upp i databasen.
+
+7. Testning och deployment
+
+Lägg till alla relevanta testskript. Exempelvis, skriv några enhetstester för detectRequirementType() funktionen och eventuella andra util-funktioner.
+
+Säkerställ att npm run build kör igenom utan fel och att den bundlade appen fungerar genom att köra npm start lokalt.
+
+För deployment, använd valfri hosting: t.ex. Dockerize appen eller använd en tjänst som Heroku/Vercel för att köra Node.js-servern och Neon som db-backend.
+
+Monitorera loggar och prestanda vid första körning i produktion och gör justeringar om något går långsamt (React Query cache-uppdateringar, databasindex om sökningen är långsam etc.).
+
+Denna arkitekturbeskrivning ger en komplett blueprint för att återskapa applikationen från grunden, inklusive tekniska val, kodstruktur, konfigurationer och implementeringsmönster som använts i systemet. Alla delar hänger samman för att leverera ett effektivt verktyg för kravanalys som kan expandera med framtida behov.

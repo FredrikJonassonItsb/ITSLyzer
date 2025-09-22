@@ -205,12 +205,37 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(requirements);
   }
 
-  async updateRequirementGroup(id: string, groupId: string, isRepresentative: boolean): Promise<void> {
+  async updateRequirementGroup(id: string, groupId: string, isRepresentative: boolean, similarityScore?: number, category?: string): Promise<void> {
     await db
       .update(requirements)
       .set({ 
         group_id: groupId, 
-        group_representative: isRepresentative 
+        group_representative: isRepresentative,
+        similarity_score: similarityScore || null,
+        category_label: category || null
+      })
+      .where(eq(requirements.id, id));
+  }
+
+  async clearAllGroupings(): Promise<void> {
+    await db
+      .update(requirements)
+      .set({ 
+        group_id: null,
+        group_representative: false,
+        similarity_score: null,
+        category_label: null
+      });
+  }
+
+  async clearRequirementGrouping(id: string): Promise<void> {
+    await db
+      .update(requirements)
+      .set({ 
+        group_id: null,
+        group_representative: false,
+        similarity_score: null,
+        category_label: null
       })
       .where(eq(requirements.id, id));
   }

@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { openaiService } from "./openai-service";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { z } from "zod";
@@ -231,11 +232,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/requirements/grouping", async (req, res) => {
     try {
-      // This will be implemented in the AI grouping task
-      res.status(501).json({ error: "AI-gruppering är inte implementerad än" });
+      // Get all requirements for grouping
+      const requirements = await storage.getRequirementsForGrouping();
+      
+      if (requirements.length === 0) {
+        return res.json({ 
+          success: true, 
+          message: "Inga krav att gruppera",
+          groups: [], 
+          summary: "Inga krav fanns tillgängliga för gruppering." 
+        });
+      }
+
+      // Perform AI-based grouping
+      console.log(`Starting AI grouping for ${requirements.length} requirements...`);
+      const groupingResult = await openaiService.groupRequirements(requirements);
+
+      // Clear all existing groupings first
+      console.log("Clearing existing groupings...");
+      await storage.clearAllGroupings();
+
+      // Update database with new grouping results
+      let updatedCount = 0;
+      for (const group of groupingResult.groups) {
+        // Mark representative requirement
+        await storage.updateRequirementGroup(
+          group.representativeId, 
+          group.groupId, 
+          true, 
+          group.similarityScore, 
+          group.category
+        );
+        updatedCount++;
+
+        // Mark other group members
+        for (const memberId of group.members) {
+          if (memberId !== group.representativeId) {
+            await storage.updateRequirementGroup(
+              memberId, 
+              group.groupId, 
+              false, 
+              group.similarityScore, 
+              group.category
+            );
+            updatedCount++;
+          }
+        }
+      }
+
+      // Explicitly clear ungrouped requirements (already cleared above, but for clarity)
+      for (const ungroupedId of groupingResult.ungroupedRequirements) {
+        await storage.clearRequirementGrouping(ungroupedId);
+      }
+
+      // Generate summary
+      const summary = await openaiService.generateGroupingSummary(
+        groupingResult.groups, 
+        requirements.length
+      );
+
+      console.log(`AI grouping completed: ${groupingResult.groups.length} groups, ${updatedCount} requirements updated`);
+
+      res.json({
+        success: true,
+        message: "AI-gruppering slutförd",
+        groups: groupingResult.groups,
+        totalRequirements: requirements.length,
+        groupedRequirements: groupingResult.groups.reduce((sum, g) => sum + g.members.length, 0),
+        ungroupedRequirements: groupingResult.ungroupedRequirements.length,
+        summary: summary
+      });
+
     } catch (error) {
       console.error("Error performing AI grouping:", error);
-      res.status(500).json({ error: "Kunde inte utföra AI-gruppering" });
+      res.status(500).json({ 
+        error: "Kunde inte utföra AI-gruppering", 
+        details: error instanceof Error ? error.message : 'Okänt fel' 
+      });
     }
   });
 

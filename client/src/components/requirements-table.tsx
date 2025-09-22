@@ -1,55 +1,77 @@
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronDown, ChevronRight, MessageSquare, Edit, Check, X, Building, Calendar, Tag } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronDown, ChevronRight, Users, Calendar, Building, MessageSquare, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Requirement } from '@shared/schema';
 
 interface RequirementsTableProps {
   requirements: Requirement[];
-  onUpdateComment?: (id: string, comment: string) => void;
-  onUpdateStatus?: (id: string, status: string) => void;
-  showGrouped?: boolean;
+  isLoading?: boolean;
+  onRefresh?: () => void;
 }
 
-export function RequirementsTable({ 
-  requirements, 
-  onUpdateComment, 
-  onUpdateStatus,
-  showGrouped = false 
-}: RequirementsTableProps) {
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+export function RequirementsTable({ requirements, isLoading, onRefresh }: RequirementsTableProps) {
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [editingComment, setEditingComment] = useState<string | null>(null);
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
-  const [commentValue, setCommentValue] = useState('');
+  const [commentText, setCommentText] = useState('');
   const [statusValue, setStatusValue] = useState('');
 
-  // Group requirements if showGrouped is true
-  const groupedRequirements = showGrouped 
-    ? requirements.reduce((acc, req) => {
-        const groupId = req.group_id || 'ungrouped';
-        if (!acc[groupId]) acc[groupId] = [];
-        acc[groupId].push(req);
-        return acc;
-      }, {} as Record<string, Requirement[]>)
-    : { all: requirements };
+  const queryClient = useQueryClient();
 
-  const toggleGroup = (groupId: string) => {
-    const newExpanded = new Set(expandedGroups);
-    if (newExpanded.has(groupId)) {
-      newExpanded.delete(groupId);
-    } else {
-      newExpanded.add(groupId);
+  // Update requirement mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Requirement> }) => {
+      const response = await fetch(`/api/requirements/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update requirement');
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/requirements'] });
+      onRefresh?.();
     }
-    setExpandedGroups(newExpanded);
+  });
+
+  const toggleExpanded = (id: string) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedRows(newExpanded);
   };
 
   const startEditComment = (req: Requirement) => {
     setEditingComment(req.id);
-    setCommentValue(req.user_comment || '');
+    setCommentText(req.user_comment || '');
+  };
+
+  const saveComment = async (id: string) => {
+    await updateMutation.mutateAsync({
+      id,
+      updates: { user_comment: commentText }
+    });
+    setEditingComment(null);
+    setCommentText('');
+  };
+
+  const cancelEditComment = () => {
+    setEditingComment(null);
+    setCommentText('');
   };
 
   const startEditStatus = (req: Requirement) => {
@@ -57,217 +79,299 @@ export function RequirementsTable({
     setStatusValue(req.user_status || 'OK');
   };
 
-  const saveComment = (id: string) => {
-    if (onUpdateComment) {
-      onUpdateComment(id, commentValue);
-    }
-    setEditingComment(null);
-    setCommentValue('');
-  };
-
-  const saveStatus = (id: string) => {
-    if (onUpdateStatus) {
-      onUpdateStatus(id, statusValue);
-    }
+  const saveStatus = async (id: string) => {
+    await updateMutation.mutateAsync({
+      id,
+      updates: { user_status: statusValue }
+    });
     setEditingStatus(null);
-    setStatusValue('');
   };
 
-  const cancelEdit = () => {
-    setEditingComment(null);
+  const cancelEditStatus = () => {
     setEditingStatus(null);
-    setCommentValue('');
-    setStatusValue('');
   };
 
-  const getStatusBadgeVariant = (status: string | null) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'OK': return 'default';
-      case 'Under utveckling': return 'secondary';
-      case 'Senare': return 'outline';
-      default: return 'default';
+      case 'OK': return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case 'Under utveckling': return <Clock className="h-4 w-4 text-yellow-600" />;
+      case 'Senare': return <AlertCircle className="h-4 w-4 text-orange-600" />;
+      default: return <AlertCircle className="h-4 w-4 text-gray-600" />;
     }
   };
 
-  const getRequirementTypeBadge = (type: string | null) => {
-    switch (type) {
-      case 'Skall': return <Badge variant="destructive">Skall</Badge>;
-      case 'Bör': return <Badge variant="secondary">Bör</Badge>;
-      default: return <Badge variant="outline">-</Badge>;
-    }
+  const getTypeVariant = (type: string) => {
+    return type === 'Skall' ? 'destructive' : 'secondary';
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {[1, 2, 3, 4, 5].map(i => (
+          <div key={i} className="h-20 bg-muted rounded animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (requirements.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <p className="text-muted-foreground">Inga krav att visa med nuvarande filter.</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      {Object.entries(groupedRequirements).map(([groupId, groupReqs]) => {
-        const isExpanded = expandedGroups.has(groupId);
-        const representativeReq = groupReqs.find(r => r.group_representative) || groupReqs[0];
-        const groupSize = groupReqs.length;
-
-        return (
-          <Card key={groupId} className="w-full">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {showGrouped && groupId !== 'all' && groupSize > 1 && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => toggleGroup(groupId)}
-                      data-testid={`button-toggle-group-${groupId}`}
-                    >
-                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    </Button>
+      {requirements.map((req) => (
+        <Card key={req.id} className="relative">
+          <CardContent className="p-0">
+            <div className="p-4">
+              {/* Header Row */}
+              <div className="flex items-start gap-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleExpanded(req.id)}
+                  className="mt-1 p-1 h-6 w-6"
+                  data-testid={`button-expand-${req.id}`}
+                >
+                  {expandedRows.has(req.id) ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
                   )}
-                  <CardTitle className="text-base flex-1">
-                    {showGrouped && groupId !== 'all' && groupSize > 1 
-                      ? `Grupperat krav (${groupSize} varianter)` 
-                      : 'Kravlista'}
-                  </CardTitle>
-                </div>
-                {showGrouped && groupId !== 'all' && groupSize > 1 && (
-                  <div className="flex gap-2">
-                    {getRequirementTypeBadge(representativeReq.requirement_type)}
-                    <Badge variant="outline">{groupSize} krav</Badge>
+                </Button>
+                
+                <div className="flex-1 space-y-3">
+                  {/* Requirement Text */}
+                  <div>
+                    <p className="text-sm leading-relaxed" data-testid={`text-requirement-${req.id}`}>
+                      {req.text}
+                    </p>
                   </div>
-                )}
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-4">
-              {/* Show representative requirement or all requirements */}
-              {(showGrouped && groupId !== 'all' && !isExpanded 
-                ? [representativeReq] 
-                : groupReqs
-              ).map((req) => (
-                <div key={req.id} className="border rounded-lg p-4 space-y-3" data-testid={`requirement-${req.id}`}>
-                  {/* Requirement Header */}
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        {getRequirementTypeBadge(req.requirement_type)}
-                        {req.is_new && <Badge variant="outline" className="text-xs">NY</Badge>}
-                        <span className="text-sm text-muted-foreground">#{req.id.slice(0, 8)}</span>
-                      </div>
-                      <p className="text-sm leading-relaxed">{req.text}</p>
-                    </div>
-                    <div className="flex flex-col gap-2 items-end">
-                      {editingStatus === req.id ? (
-                        <div className="flex items-center gap-2">
-                          <Select value={statusValue} onValueChange={setStatusValue}>
-                            <SelectTrigger className="w-36">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="OK">OK</SelectItem>
-                              <SelectItem value="Under utveckling">Under utveckling</SelectItem>
-                              <SelectItem value="Senare">Senare</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button size="icon" variant="ghost" onClick={() => saveStatus(req.id)} data-testid={`button-save-status-${req.id}`}>
-                            <Check className="h-4 w-4" />
-                          </Button>
-                          <Button size="icon" variant="ghost" onClick={cancelEdit} data-testid={`button-cancel-status-${req.id}`}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <Badge 
-                          variant={getStatusBadgeVariant(req.user_status)}
-                          className="cursor-pointer hover-elevate"
-                          onClick={() => startEditStatus(req)}
-                          data-testid={`badge-status-${req.id}`}
-                        >
-                          {req.user_status || 'OK'}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Requirement Metadata */}
-                  <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Building className="h-3 w-3" />
-                      <span>Organisationer: {req.organizations.length}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      <span>Senast sedd: {req.last_seen_date || 'Okänd'}</span>
-                    </div>
-                    {req.requirement_category && (
-                      <div className="flex items-center gap-1">
-                        <Tag className="h-3 w-3" />
-                        <span>{req.requirement_category}</span>
-                      </div>
+                  
+                  {/* Badges and Info */}
+                  <div className="flex items-center flex-wrap gap-2">
+                    <Badge 
+                      variant={getTypeVariant(req.requirement_type)}
+                      data-testid={`badge-type-${req.id}`}
+                    >
+                      {req.requirement_type}
+                    </Badge>
+                    
+                    {req.group_id && (
+                      <Badge variant="outline" className="gap-1">
+                        <Users className="h-3 w-3" />
+                        Grupp {req.group_id.slice(-4)}
+                      </Badge>
+                    )}
+                    
+                    {req.is_new && (
+                      <Badge variant="secondary">NYA</Badge>
+                    )}
+                    
+                    {req.occurrences > 1 && (
+                      <Badge variant="outline">
+                        {req.occurrences} förekomster
+                      </Badge>
                     )}
                   </div>
+                </div>
 
-                  {/* Statistics */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div className="text-center p-2 bg-muted rounded">
-                      <div className="font-semibold">{req.occurrences}</div>
-                      <div className="text-xs text-muted-foreground">Förekomster</div>
-                    </div>
-                    <div className="text-center p-2 bg-muted rounded">
-                      <div className="font-semibold">{req.must_count}/{req.should_count}</div>
-                      <div className="text-xs text-muted-foreground">Skall/Bör</div>
-                    </div>
-                    <div className="text-center p-2 bg-muted rounded">
-                      <div className="font-semibold">{req.fulfilled_yes}</div>
-                      <div className="text-xs text-muted-foreground">Uppfylls</div>
-                    </div>
-                    <div className="text-center p-2 bg-muted rounded">
-                      <div className="font-semibold">{req.fulfilled_no}</div>
-                      <div className="text-xs text-muted-foreground">Uppfylls ej</div>
-                    </div>
-                  </div>
-
-                  {/* Historical Response */}
-                  {req.sample_response && (
-                    <div className="p-3 bg-muted rounded-lg">
-                      <h4 className="text-sm font-medium mb-2">Tidigare svar:</h4>
-                      <p className="text-sm">{req.sample_response}</p>
-                    </div>
-                  )}
-
-                  {/* User Comment */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-medium flex items-center gap-2">
-                        <MessageSquare className="h-4 w-4" />
-                        Intern kommentar
-                      </h4>
-                      {!editingComment && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => startEditComment(req)}
-                          data-testid={`button-edit-comment-${req.id}`}
+                {/* Status Column */}
+                <div className="flex flex-col items-end gap-2 min-w-[120px]">
+                  {editingStatus === req.id ? (
+                    <div className="space-y-2">
+                      <Select value={statusValue} onValueChange={setStatusValue}>
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="OK">OK</SelectItem>
+                          <SelectItem value="Under utveckling">Under utveckling</SelectItem>
+                          <SelectItem value="Senare">Senare</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="flex gap-1">
+                        <Button 
+                          size="sm" 
+                          onClick={() => saveStatus(req.id)}
+                          disabled={updateMutation.isPending}
                         >
-                          <Edit className="h-3 w-3" />
+                          Spara
                         </Button>
-                      )}
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={cancelEditStatus}
+                        >
+                          Avbryt
+                        </Button>
+                      </div>
                     </div>
-                    
-                    {editingComment === req.id ? (
-                      <div className="space-y-2">
-                        <Textarea
-                          value={commentValue}
-                          onChange={(e) => setCommentValue(e.target.value)}
-                          placeholder="Lägg till intern kommentar..."
-                          rows={3}
-                          data-testid={`textarea-comment-${req.id}`}
-                        />
-                        <div className="flex gap-2">
-                          <Button size="sm" onClick={() => saveComment(req.id)} data-testid={`button-save-comment-${req.id}`}>
-                            Spara
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={cancelEdit} data-testid={`button-cancel-comment-${req.id}`}>
-                            Avbryt
-                          </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => startEditStatus(req)}
+                      className="flex items-center gap-2 h-auto p-2"
+                      data-testid={`button-status-${req.id}`}
+                    >
+                      {getStatusIcon(req.user_status || 'OK')}
+                      <span className="text-xs">{req.user_status || 'OK'}</span>
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Expanded Content */}
+              <Collapsible open={expandedRows.has(req.id)}>
+                <CollapsibleContent className="mt-4 pt-4 border-t">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Left Column - Details */}
+                    <div className="space-y-4">
+                      {/* Organizations */}
+                      {req.organizations && req.organizations.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
+                            <Building className="h-4 w-4" />
+                            Organisationer ({req.organizations.length})
+                          </h4>
+                          <div className="flex flex-wrap gap-1">
+                            {req.organizations.map(org => (
+                              <Badge key={org} variant="outline" className="text-xs">
+                                {org}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Categories */}
+                      {req.categories && req.categories.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-medium mb-2">Kategorier</h4>
+                          <div className="flex flex-wrap gap-1">
+                            {req.categories.map(cat => (
+                              <Badge key={cat} variant="secondary" className="text-xs">
+                                {cat}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Dates */}
+                      {req.dates && req.dates.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
+                            <Calendar className="h-4 w-4" />
+                            Datum
+                          </h4>
+                          <div className="flex flex-wrap gap-1">
+                            {req.dates.map(date => (
+                              <Badge key={date} variant="outline" className="text-xs">
+                                {date}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Statistics */}
+                      <div>
+                        <h4 className="text-sm font-medium mb-2">Statistik</h4>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="p-2 bg-red-50 dark:bg-red-950 rounded">
+                            <span className="font-medium">Skall:</span> {req.must_count}
+                          </div>
+                          <div className="p-2 bg-yellow-50 dark:bg-yellow-950 rounded">
+                            <span className="font-medium">Bör:</span> {req.should_count}
+                          </div>
+                          <div className="p-2 bg-green-50 dark:bg-green-950 rounded">
+                            <span className="font-medium">Uppfyllt:</span> {req.fulfilled_yes}
+                          </div>
+                          <div className="p-2 bg-gray-50 dark:bg-gray-950 rounded">
+                            <span className="font-medium">Ej uppfyllt:</span> {req.fulfilled_no}
+                          </div>
                         </div>
                       </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground p-2 bg-muted rounded min-h-[2rem] flex items-center">
-                        {req.user_comment || 'Ingen kommentar tillagd...'}\n                      </p>
-                    )}\n                  </div>\n                </div>\n              ))}\n            </CardContent>\n          </Card>\n        );\n      })}\n    </div>\n  );\n}\n\nexport default RequirementsTable;
+                    </div>
+
+                    {/* Right Column - Comments */}
+                    <div className="space-y-4">
+                      {/* Sample Response */}
+                      {req.sample_response && (
+                        <div>
+                          <h4 className="text-sm font-medium mb-2">Exempel på svar</h4>
+                          <p className="text-xs text-muted-foreground bg-muted p-3 rounded">
+                            {req.sample_response}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* User Comment */}
+                      <div>
+                        <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
+                          <MessageSquare className="h-4 w-4" />
+                          Kommentar
+                        </h4>
+                        
+                        {editingComment === req.id ? (
+                          <div className="space-y-2">
+                            <Textarea
+                              value={commentText}
+                              onChange={(e) => setCommentText(e.target.value)}
+                              placeholder="Lägg till kommentar..."
+                              className="min-h-20"
+                              data-testid={`textarea-comment-${req.id}`}
+                            />
+                            <div className="flex gap-2">
+                              <Button 
+                                size="sm" 
+                                onClick={() => saveComment(req.id)}
+                                disabled={updateMutation.isPending}
+                                data-testid={`button-save-comment-${req.id}`}
+                              >
+                                Spara
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={cancelEditComment}
+                              >
+                                Avbryt
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            onClick={() => startEditComment(req)}
+                            className="min-h-20 p-3 border rounded cursor-pointer hover:bg-muted/50 transition-colors"
+                            data-testid={`div-comment-${req.id}`}
+                          >
+                            {req.user_comment ? (
+                              <p className="text-sm">{req.user_comment}</p>
+                            ) : (
+                              <p className="text-sm text-muted-foreground italic">
+                                Klicka för att lägga till kommentar...
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}

@@ -1,1 +1,377 @@
-import { useState } from 'react';\nimport { RequirementsTable } from '@/components/requirements-table';\nimport { SearchFilters } from '@/components/search-filters';\nimport { CategoryNavigation } from '@/components/category-navigation';\nimport { Button } from '@/components/ui/button';\nimport { Badge } from '@/components/ui/badge';\nimport { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';\nimport { Download, Filter, SlidersHorizontal, Grid, List } from 'lucide-react';\nimport type { FilterOptions, Requirement } from '@shared/schema';\n\ntype ViewMode = 'table' | 'grid';\n\nexport function RequirementsPage() {\n  const [filters, setFilters] = useState<FilterOptions>({\n    searchQuery: '',\n    requirementTypes: [],\n    organizations: [],\n    categories: [],\n    dates: [],\n    userStatus: [],\n    showOnlyNew: false,\n    showGrouped: false\n  });\n  \n  const [selectedCategory, setSelectedCategory] = useState<string>('all');\n  const [viewMode, setViewMode] = useState<ViewMode>('table');\n  const [showFilters, setShowFilters] = useState(false);\n\n  // Mock data for demonstration\n  const mockRequirements: Requirement[] = [\n    {\n      id: 'req-001',\n      text: 'Systemet ska stödja inloggning med tvåfaktorsautentisering (2FA) för alla användarkonton med stöd för SMS, email och authenticator-appar.',\n      occurrences: 4,\n      organizations: ['Karolinska', 'SLL', 'Danderyds sjukhus', 'Södersjukhuset'],\n      must_count: 3,\n      should_count: 1,\n      fulfilled_yes: 3,\n      fulfilled_no: 1,\n      attachment_required: false,\n      req_ids: ['REQ-001', 'REQ-045', 'REQ-089'],\n      categories: ['Säkerhet', 'Autentisering'],\n      procurements: ['P2024-01', 'P2024-03', 'P2024-05'],\n      dates: ['2024-01-15', '2024-02-20', '2024-03-10'],\n      sample_comment: 'Kräver MFA-stöd',\n      sample_response: 'Vi stöder 2FA via SMS, email och authenticator-appar som Google Authenticator och Microsoft Authenticator. Implementerat enligt NIST 800-63B standard.',\n      user_comment: 'Redan implementerat i vår lösning med full NIST-kompatibilitet',\n      user_status: 'OK',\n      group_id: 'auth-group-1',\n      group_representative: true,\n      similarity_score: 95,\n      historical_comments: ['Viktigt för säkerhet', 'NIST-kompatibilitet krävs'],\n      last_seen_date: '2024-03-10',\n      first_seen_date: '2024-01-15',\n      is_new: false,\n      category_label: 'Säkerhet och autentisering',\n      import_organization: 'Karolinska',\n      import_date: '2024-01-15',\n      requirement_type: 'Skall',\n      requirement_category: 'Säkerhet'\n    },\n    {\n      id: 'req-002',\n      text: 'Alla användardata ska krypteras både i vila och under transport enligt AES-256 standard med certifierad implementering.',\n      occurrences: 6,\n      organizations: ['SLL', 'Danderyds sjukhus', 'Södersjukhuset', 'Karolinska', 'St Görans', 'Ersta'],\n      must_count: 5,\n      should_count: 1,\n      fulfilled_yes: 5,\n      fulfilled_no: 1,\n      attachment_required: true,\n      req_ids: ['REQ-002', 'REQ-033', 'REQ-067', 'REQ-102'],\n      categories: ['Säkerhet', 'Kryptering', 'GDPR'],\n      procurements: ['P2024-01', 'P2024-02', 'P2024-04', 'P2024-06'],\n      dates: ['2024-01-10', '2024-02-15', '2024-03-01', '2024-03-20'],\n      sample_comment: 'Kräver certifiering och FIPS 140-2 Level 2',\n      sample_response: 'Vi använder AES-256 kryptering med TLS 1.3 för transport och transparent databasskryptering för vila. Certifierad enligt FIPS 140-2 Level 2.',\n      user_comment: 'Certifiering pågår, förväntas klar Q2 2024',\n      user_status: 'Under utveckling',\n      group_id: 'security-group-1',\n      group_representative: true,\n      similarity_score: 98,\n      historical_comments: ['Viktigt för GDPR-efterlevnad', 'FIPS certifiering krävs'],\n      last_seen_date: '2024-03-20',\n      first_seen_date: '2024-01-10',\n      is_new: false,\n      category_label: 'Säkerhet och kryptering',\n      import_organization: 'SLL',\n      import_date: '2024-01-10',\n      requirement_type: 'Skall',\n      requirement_category: 'Säkerhet'\n    },\n    {\n      id: 'req-003',\n      text: 'Systemet bör ha stöd för automatisk säkerhetskopiering med konfigurerbar frekvens (dagligen, veckovis, månadsvis) och point-in-time recovery.',\n      occurrences: 3,\n      organizations: ['Karolinska', 'Södersjukhuset', 'St Görans'],\n      must_count: 0,\n      should_count: 3,\n      fulfilled_yes: 2,\n      fulfilled_no: 0,\n      attachment_required: false,\n      req_ids: ['REQ-078', 'REQ-134'],\n      categories: ['Backup', 'Säkerhet'],\n      procurements: ['P2024-02', 'P2024-07'],\n      dates: ['2024-02-01', '2024-03-25'],\n      sample_comment: 'RTO max 4 timmar',\n      sample_response: 'Vi erbjuder dagliga, veckovisa och månatliga säkerhetskopior med point-in-time recovery upp till 30 dagar bakåt.',\n      user_comment: 'Planerad för Q3 2024 release',\n      user_status: 'Senare',\n      group_id: null,\n      group_representative: false,\n      similarity_score: 0,\n      historical_comments: [],\n      last_seen_date: '2024-03-25',\n      first_seen_date: '2024-02-01',\n      is_new: true,\n      category_label: 'Backup och återställning',\n      import_organization: 'Karolinska',\n      import_date: '2024-02-01',\n      requirement_type: 'Bör',\n      requirement_category: 'Backup'\n    },\n    {\n      id: 'req-004',\n      text: 'API:et ska stödja RESTful arkitektur med JSON-baserad datautväxling och versionering via headers eller URL-path.',\n      occurrences: 4,\n      organizations: ['SLL', 'Karolinska', 'Danderyds sjukhus', 'Södersjukhuset'],\n      must_count: 4,\n      should_count: 0,\n      fulfilled_yes: 4,\n      fulfilled_no: 0,\n      attachment_required: false,\n      req_ids: ['REQ-156', 'REQ-203', 'REQ-267'],\n      categories: ['API', 'Integration'],\n      procurements: ['P2024-03', 'P2024-05', 'P2024-08'],\n      dates: ['2024-02-10', '2024-03-05', '2024-03-30'],\n      sample_comment: 'OpenAPI 3.0 specifikation krävs',\n      sample_response: 'Vårt API följer REST-principer med JSON-payloads och stöder versionering via både headers (Accept-Version) och URL-path (/api/v1/). Full OpenAPI 3.0 dokumentation tillhandahålls.',\n      user_comment: 'Redan implementerat och dokumenterat',\n      user_status: 'OK',\n      group_id: 'api-group-1',\n      group_representative: true,\n      similarity_score: 92,\n      historical_comments: ['OpenAPI spec viktigt', 'Versionering måste hanteras'],\n      last_seen_date: '2024-03-30',\n      first_seen_date: '2024-02-10',\n      is_new: false,\n      category_label: 'API och integration',\n      import_organization: 'SLL',\n      import_date: '2024-02-10',\n      requirement_type: 'Skall',\n      requirement_category: 'API'\n    }\n  ];\n\n  const mockCategories = [\n    {\n      id: 'security',\n      name: 'Säkerhet',\n      count: 156,\n      subcategories: [\n        { id: 'auth', name: 'Autentisering', count: 45 },\n        { id: 'encryption', name: 'Kryptering', count: 38 },\n        { id: 'access-control', name: 'Åtkomstkontroll', count: 35 },\n        { id: 'audit', name: 'Revision', count: 38 }\n      ]\n    },\n    {\n      id: 'integration',\n      name: 'Integration',\n      count: 98,\n      subcategories: [\n        { id: 'api', name: 'API', count: 45 },\n        { id: 'data-exchange', name: 'Datautbyte', count: 28 },\n        { id: 'protocols', name: 'Protokoll', count: 25 }\n      ]\n    },\n    {\n      id: 'backup',\n      name: 'Backup',\n      count: 67\n    },\n    {\n      id: 'performance',\n      name: 'Prestanda',\n      count: 89\n    }\n  ];\n\n  const mockOrganizations = [\n    'Karolinska Universitetssjukhuset',\n    'Stockholms Läns Landsting',\n    'Danderyds sjukhus',\n    'Södersjukhuset',\n    'St Görans sjukhus',\n    'Ersta sjukhus'\n  ];\n\n  const mockDates = ['2024-01-15', '2024-02-20', '2024-03-01', '2024-03-15', '2024-03-30'];\n\n  const handleUpdateComment = (id: string, comment: string) => {\n    console.log('Update comment for', id, ':', comment);\n    // TODO: Implement API call to update comment\n  };\n\n  const handleUpdateStatus = (id: string, status: string) => {\n    console.log('Update status for', id, ':', status);\n    // TODO: Implement API call to update status\n  };\n\n  const handleExport = () => {\n    console.log('Export requirements with current filters:', filters);\n    // TODO: Implement export functionality\n  };\n\n  const handleClearFilters = () => {\n    setFilters({\n      searchQuery: '',\n      requirementTypes: [],\n      organizations: [],\n      categories: [],\n      dates: [],\n      userStatus: [],\n      showOnlyNew: false,\n      showGrouped: false\n    });\n    setSelectedCategory('all');\n  };\n\n  const filteredRequirements = mockRequirements; // TODO: Apply actual filtering logic\n  const totalResults = filteredRequirements.length;\n\n  return (\n    <div className=\"p-6 max-w-7xl mx-auto space-y-6\">\n      {/* Header */}\n      <div className=\"flex items-center justify-between\">\n        <div>\n          <h1 className=\"text-3xl font-bold\">Kravsammanställning</h1>\n          <p className=\"text-muted-foreground mt-1\">\n            Hantera och granska alla dina importerade krav.\n          </p>\n        </div>\n        \n        <div className=\"flex items-center gap-2\">\n          <Button\n            variant=\"outline\"\n            onClick={() => setShowFilters(!showFilters)}\n            className=\"gap-2\"\n            data-testid=\"button-toggle-filters\"\n          >\n            <Filter className=\"h-4 w-4\" />\n            Filter\n            {Object.values(filters).some(v => Array.isArray(v) ? v.length > 0 : v) && (\n              <Badge variant=\"secondary\" className=\"ml-1\">Aktiv</Badge>\n            )}\n          </Button>\n          \n          <div className=\"flex items-center border rounded-md\">\n            <Button\n              size=\"sm\"\n              variant={viewMode === 'table' ? 'default' : 'ghost'}\n              onClick={() => setViewMode('table')}\n              data-testid=\"button-view-table\"\n            >\n              <List className=\"h-4 w-4\" />\n            </Button>\n            <Button\n              size=\"sm\"\n              variant={viewMode === 'grid' ? 'default' : 'ghost'}\n              onClick={() => setViewMode('grid')}\n              data-testid=\"button-view-grid\"\n            >\n              <Grid className=\"h-4 w-4\" />\n            </Button>\n          </div>\n          \n          <Button\n            variant=\"outline\"\n            onClick={handleExport}\n            className=\"gap-2\"\n            data-testid=\"button-export\"\n          >\n            <Download className=\"h-4 w-4\" />\n            Exportera\n          </Button>\n        </div>\n      </div>\n\n      {/* Results Summary */}\n      <Card>\n        <CardContent className=\"pt-6\">\n          <div className=\"flex items-center justify-between\">\n            <div className=\"flex items-center gap-4\">\n              <div>\n                <span className=\"text-2xl font-bold\" data-testid=\"total-results\">\n                  {totalResults.toLocaleString('sv-SE')}\n                </span>\n                <span className=\"text-muted-foreground ml-2\">krav</span>\n              </div>\n              \n              <div className=\"flex gap-2\">\n                <Badge variant=\"destructive\">\n                  {mockRequirements.filter(r => r.requirement_type === 'Skall').length} Skall\n                </Badge>\n                <Badge variant=\"secondary\">\n                  {mockRequirements.filter(r => r.requirement_type === 'Bör').length} Bör\n                </Badge>\n                <Badge variant=\"outline\">\n                  {mockRequirements.filter(r => r.is_new).length} Nya\n                </Badge>\n              </div>\n            </div>\n            \n            {(Object.values(filters).some(v => Array.isArray(v) ? v.length > 0 : v) || selectedCategory !== 'all') && (\n              <Button\n                variant=\"outline\"\n                size=\"sm\"\n                onClick={handleClearFilters}\n                data-testid=\"button-clear-all-filters\"\n              >\n                Rensa alla filter\n              </Button>\n            )}\n          </div>\n        </CardContent>\n      </Card>\n\n      <div className=\"grid grid-cols-1 lg:grid-cols-4 gap-6\">\n        {/* Sidebar */}\n        <div className=\"lg:col-span-1 space-y-6\">\n          {/* Category Navigation */}\n          <CategoryNavigation\n            categories={mockCategories}\n            selectedCategory={selectedCategory}\n            onCategorySelect={setSelectedCategory}\n            onConfigureCategories={() => console.log('Configure categories')}\n          />\n          \n          {/* Filters */}\n          {showFilters && (\n            <SearchFilters\n              filters={filters}\n              availableOrganizations={mockOrganizations}\n              availableCategories={mockCategories.map(c => c.name)}\n              availableDates={mockDates}\n              onFiltersChange={setFilters}\n              onClearFilters={handleClearFilters}\n              totalResults={totalResults}\n            />\n          )}\n        </div>\n\n        {/* Main Content */}\n        <div className=\"lg:col-span-3\">\n          <RequirementsTable\n            requirements={filteredRequirements}\n            onUpdateComment={handleUpdateComment}\n            onUpdateStatus={handleUpdateStatus}\n            showGrouped={filters.showGrouped || false}\n          />\n        </div>\n      </div>\n    </div>\n  );\n}\n\nexport default RequirementsPage;
+import { useState } from 'react';
+import { RequirementsTable } from '@/components/requirements-table';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Search, Filter, Download, Upload, Brain, BarChart3 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import type { FilterOptions } from '@shared/schema';
+
+export function RequirementsPage() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedOrganizations, setSelectedOrganizations] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(['all']);
+  const [selectedStatus, setSelectedStatus] = useState<string[]>(['all']);
+  const [showOnlyNew, setShowOnlyNew] = useState(false);
+  const [showGrouped, setShowGrouped] = useState(false);
+  const [activeTab, setActiveTab] = useState('all');
+
+  // Fetch requirements with filters
+  const { data: requirements = [], isLoading, refetch } = useQuery({
+    queryKey: ['/api/requirements', { 
+      searchQuery, 
+      requirementTypes: selectedTypes,
+      organizations: selectedOrganizations,
+      categories: selectedCategories,
+      userStatus: selectedStatus,
+      showOnlyNew,
+      showGrouped 
+    }],
+    enabled: true
+  });
+
+  // Get unique values for filters
+  const uniqueOrganizations = Array.from(new Set(
+    requirements.flatMap(req => req.organizations || [])
+  )).filter(Boolean);
+
+  const uniqueCategories = Array.from(new Set(
+    requirements.flatMap(req => req.categories || [])
+  )).filter(Boolean);
+
+  const handleExport = () => {
+    console.log('Exporting requirements...', { 
+      count: requirements.length,
+      filters: { searchQuery, selectedOrganizations, selectedCategories }
+    });
+    // TODO: Implement export functionality
+  };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSelectedOrganizations([]);
+    setSelectedCategories([]);
+    setSelectedTypes(['all']);
+    setSelectedStatus(['all']);
+    setShowOnlyNew(false);
+    setShowGrouped(false);
+  };
+
+  const filteredRequirements = requirements.filter(req => {
+    // Tab filtering
+    if (activeTab === 'new' && !req.is_new) return false;
+    if (activeTab === 'grouped' && !req.group_id) return false;
+    if (activeTab === 'mustHave' && req.requirement_type !== 'Skall') return false;
+    if (activeTab === 'shouldHave' && req.requirement_type !== 'Bör') return false;
+    
+    return true;
+  });
+
+  const getTabCount = (tab: string) => {
+    switch (tab) {
+      case 'all': return requirements.length;
+      case 'new': return requirements.filter(req => req.is_new).length;
+      case 'grouped': return requirements.filter(req => req.group_id).length;
+      case 'mustHave': return requirements.filter(req => req.requirement_type === 'Skall').length;
+      case 'shouldHave': return requirements.filter(req => req.requirement_type === 'Bör').length;
+      default: return 0;
+    }
+  };
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-semibold">Kravsammanställning</h1>
+          <p className="text-muted-foreground">
+            Hantera och analysera alla krav i systemet.
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="outline" 
+            onClick={handleExport}
+            data-testid="button-export"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Exportera
+          </Button>
+          <Button 
+            onClick={() => window.location.href = '/import'}
+            data-testid="button-import"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Importera
+          </Button>
+        </div>
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Totalt krav</p>
+                <p className="text-2xl font-bold" data-testid="stat-total">
+                  {requirements.length}
+                </p>
+              </div>
+              <BarChart3 className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Skall-krav</p>
+                <p className="text-2xl font-bold text-red-600" data-testid="stat-must">
+                  {requirements.filter(req => req.requirement_type === 'Skall').length}
+                </p>
+              </div>
+              <Badge variant="destructive" className="text-xs">SKALL</Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Bör-krav</p>
+                <p className="text-2xl font-bold text-yellow-600" data-testid="stat-should">
+                  {requirements.filter(req => req.requirement_type === 'Bör').length}
+                </p>
+              </div>
+              <Badge variant="secondary" className="text-xs">BÖR</Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Grupperade</p>
+                <p className="text-2xl font-bold text-blue-600" data-testid="stat-grouped">
+                  {requirements.filter(req => req.group_id).length}
+                </p>
+              </div>
+              <Brain className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-5 w-5" />
+            Filter och sökning
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Search */}
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Sök i kravtext..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+                data-testid="input-search"
+              />
+            </div>
+            <Button 
+              variant="outline" 
+              onClick={clearFilters}
+              data-testid="button-clear-filters"
+            >
+              Rensa filter
+            </Button>
+          </div>
+
+          {/* Filters Row */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Kravtyp</label>
+              <Select 
+                value={selectedTypes[0] || 'all'} 
+                onValueChange={(value) => setSelectedTypes([value])}
+              >
+                <SelectTrigger data-testid="select-type">
+                  <SelectValue placeholder="Alla typer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla typer</SelectItem>
+                  <SelectItem value="Skall">Skall-krav</SelectItem>
+                  <SelectItem value="Bör">Bör-krav</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Status</label>
+              <Select 
+                value={selectedStatus[0] || 'all'} 
+                onValueChange={(value) => setSelectedStatus([value])}
+              >
+                <SelectTrigger data-testid="select-status">
+                  <SelectValue placeholder="All status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla status</SelectItem>
+                  <SelectItem value="OK">OK</SelectItem>
+                  <SelectItem value="Under utveckling">Under utveckling</SelectItem>
+                  <SelectItem value="Senare">Senare</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Organisationer</label>
+              <Select 
+                value={selectedOrganizations[0] || 'all'} 
+                onValueChange={(value) => {
+                  if (value === 'all') {
+                    setSelectedOrganizations([]);
+                  } else {
+                    setSelectedOrganizations([value]);
+                  }
+                }}
+              >
+                <SelectTrigger data-testid="select-organization">
+                  <SelectValue placeholder="Alla organisationer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla organisationer</SelectItem>
+                  {uniqueOrganizations.map(org => (
+                    <SelectItem key={org} value={org}>{org}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Kategorier</label>
+              <Select 
+                value={selectedCategories[0] || 'all'} 
+                onValueChange={(value) => {
+                  if (value === 'all') {
+                    setSelectedCategories([]);
+                  } else {
+                    setSelectedCategories([value]);
+                  }
+                }}
+              >
+                <SelectTrigger data-testid="select-category">
+                  <SelectValue placeholder="Alla kategorier" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla kategorier</SelectItem>
+                  {uniqueCategories.map(cat => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Checkboxes */}
+          <div className="flex items-center gap-6">
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="showOnlyNew" 
+                checked={showOnlyNew}
+                onCheckedChange={(checked) => setShowOnlyNew(checked as boolean)}
+                data-testid="checkbox-only-new"
+              />
+              <label htmlFor="showOnlyNew" className="text-sm">
+                Visa endast nya krav
+              </label>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="showGrouped" 
+                checked={showGrouped}
+                onCheckedChange={(checked) => setShowGrouped(checked as boolean)}
+                data-testid="checkbox-grouped"
+              />
+              <label htmlFor="showGrouped" className="text-sm">
+                Visa endast grupperade krav
+              </label>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Requirements Tabs */}
+      <Card>
+        <CardHeader>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="all" data-testid="tab-all">
+                Alla ({getTabCount('all')})
+              </TabsTrigger>
+              <TabsTrigger value="new" data-testid="tab-new">
+                Nya ({getTabCount('new')})
+              </TabsTrigger>
+              <TabsTrigger value="grouped" data-testid="tab-grouped">
+                Grupperade ({getTabCount('grouped')})
+              </TabsTrigger>
+              <TabsTrigger value="mustHave" data-testid="tab-must">
+                Skall ({getTabCount('mustHave')})
+              </TabsTrigger>
+              <TabsTrigger value="shouldHave" data-testid="tab-should">
+                Bör ({getTabCount('shouldHave')})
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </CardHeader>
+        <CardContent>
+          <RequirementsTable 
+            requirements={filteredRequirements}
+            isLoading={isLoading}
+            onRefresh={refetch}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Help */}
+      {requirements.length === 0 && !isLoading && (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <div className="space-y-4">
+              <div className="mx-auto w-12 h-12 bg-muted rounded-full flex items-center justify-center">
+                <Upload className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <div>
+                <h3 className="text-lg font-medium">Inga krav importerade än</h3>
+                <p className="text-muted-foreground">
+                  Börja med att importera en Excel-fil med krav för att se dem här.
+                </p>
+              </div>
+              <Button onClick={() => window.location.href = '/import'}>
+                Importera första filen
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+export default RequirementsPage;

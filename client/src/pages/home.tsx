@@ -1,268 +1,300 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Upload, FileSpreadsheet, Brain, BarChart3, CheckCircle, Clock, AlertCircle } from 'lucide-react';
-import { useLocation } from 'wouter';
+import { Upload, FileSpreadsheet, Brain, BarChart3, ArrowRight, CheckCircle, Zap, Shield } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
-export function Home() {
-  const [, setLocation] = useLocation();
+export function HomePage() {
+  // Fetch recent statistics
+  const { data: statistics } = useQuery({
+    queryKey: ['/api/statistics'],
+    enabled: true
+  });
 
-  const quickStats = {
-    totalRequirements: 1247,
-    newRequirements: 45,
-    organizations: 12,
-    lastImport: '2024-03-15'
+  const stats = statistics || {
+    totalRequirements: 0,
+    mustRequirements: 0,
+    shouldRequirements: 0,
+    organizations: 0,
+    groups: 0,
+    newRequirements: 0
   };
 
   const quickActions = [
     {
-      title: 'Importera ny fil',
-      description: 'Ladda upp en Excel-fil med krav för analys',
+      title: 'Importera Excel',
+      description: 'Ladda upp en ny Excel-fil med krav',
       icon: Upload,
-      action: () => setLocation('/import'),
+      href: '/import',
       variant: 'default' as const,
       testId: 'action-import'
     },
     {
-      title: 'Visa kravsammanställning',
-      description: 'Bläddra genom alla befintliga krav',
+      title: 'Kravsammanställning',
+      description: 'Granska och hantera alla krav',
       icon: FileSpreadsheet,
-      action: () => setLocation('/requirements'),
+      href: '/requirements',
       variant: 'outline' as const,
       testId: 'action-requirements'
     },
     {
       title: 'AI-gruppering',
-      description: 'Låt AI gruppera liknande krav automatiskt',
+      description: 'Kör AI-analys för att gruppera krav',
       icon: Brain,
-      action: () => setLocation('/ai-grouping'),
+      href: '/ai-grouping',
       variant: 'outline' as const,
       testId: 'action-ai-grouping'
     },
     {
-      title: 'Se statistik',
-      description: 'Översikt över krav och organisationer',
+      title: 'Statistik',
+      description: 'Se rapporter och analyser',
       icon: BarChart3,
-      action: () => setLocation('/statistics'),
+      href: '/statistics',
       variant: 'outline' as const,
       testId: 'action-statistics'
     }
   ];
 
-  const recentActivity = [
+  const features = [
     {
-      type: 'import',
-      title: 'Ny fil importerad',
-      description: 'Karolinska_krav_2024.xlsx - 67 nya krav',
-      timestamp: '2 timmar sedan',
-      status: 'success'
+      icon: Upload,
+      title: 'Excel-import',
+      description: 'Intelligent parsing av svenska Excel-filer med automatisk kolumnidentifiering'
     },
     {
-      type: 'grouping',
-      title: 'AI-gruppering slutförd',
-      description: '12 nya grupper identifierade',
-      timestamp: '1 dag sedan', 
-      status: 'success'
+      icon: Brain,
+      title: 'AI-gruppering',
+      description: 'Använder GPT-5 för att automatiskt gruppera liknande krav och identifiera duplikater'
     },
     {
-      type: 'update',
-      title: 'Kravstatus uppdaterad',
-      description: '23 krav markerade som "Under utveckling"',
-      timestamp: '2 dagar sedan',
-      status: 'pending'
+      icon: Shield,
+      title: 'Svensk support',
+      description: 'Fullständigt stöd för svenska tecken (åäö) och terminologi genom hela systemet'
+    },
+    {
+      icon: BarChart3,
+      title: 'Djup analys',
+      description: 'Omfattande statistik och rapporter för att förstå era kravprocesser'
     }
   ];
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'success': return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case 'pending': return <Clock className="h-4 w-4 text-yellow-600" />;
-      case 'error': return <AlertCircle className="h-4 w-4 text-red-600" />;
-      default: return <Clock className="h-4 w-4 text-muted-foreground" />;
-    }
-  };
-
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-8">
+    <div className="p-6 max-w-6xl mx-auto space-y-8">
       {/* Header */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold">Välkommen till ITSL Kravanalys</h1>
-        <p className="text-lg text-muted-foreground">
-          Hantera och analysera upphandlingskrav med AI-stödd gruppering och kategorisering.
+      <div className="text-center space-y-4">
+        <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium">
+          <Zap className="h-4 w-4" />
+          Svenskt Kravanalysverktyg för ITSL
+        </div>
+        
+        <h1 className="text-4xl font-bold tracking-tight">
+          Intelligent kravhantering för svenska organisationer
+        </h1>
+        
+        <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+          Automatisera analys av kravspecifikationer med AI-driven gruppering, 
+          dubblettdetektering och omfattande statistik. Designat för svenska 
+          upphandlingsprocesser.
         </p>
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Totalt krav</CardTitle>
-            <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="stat-total-requirements">
-              {quickStats.totalRequirements.toLocaleString('sv-SE')}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              I systemet
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Nya krav</CardTitle>
-            <Upload className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600" data-testid="stat-new-requirements">
-              {quickStats.newRequirements}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Senaste importen
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Organisationer</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="stat-organizations">
-              {quickStats.organizations}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Aktiva
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Senaste import</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="stat-last-import">
-              15 mar
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {quickStats.lastImport}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      {stats.totalRequirements > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold text-blue-600" data-testid="stat-total">
+                {stats.totalRequirements.toLocaleString('sv-SE')}
+              </p>
+              <p className="text-sm text-muted-foreground">Totalt krav</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold text-red-600" data-testid="stat-must">
+                {stats.mustRequirements}
+              </p>
+              <p className="text-sm text-muted-foreground">Skall-krav</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold text-green-600" data-testid="stat-organizations">
+                {stats.organizations}
+              </p>
+              <p className="text-sm text-muted-foreground">Organisationer</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold text-purple-600" data-testid="stat-groups">
+                {stats.groups}
+              </p>
+              <p className="text-sm text-muted-foreground">AI-grupper</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Quick Actions */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Snabbåtgärder</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {quickActions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <Card key={action.title} className="hover-elevate cursor-pointer" onClick={action.action}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <Icon className="h-5 w-5 text-primary" />
-                    </div>
-                    {action.title}
-                  </CardTitle>
-                  <CardDescription>{action.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button 
-                    variant={action.variant} 
-                    className="w-full"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      action.action();
-                    }}
-                    data-testid={action.testId}
-                  >
-                    Öppna
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Recent Activity */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Senaste aktivitet</h2>
-        <Card>
-          <CardContent className="p-6">
-            <div className="space-y-4">
-              {recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-start gap-4 p-3 rounded-lg hover-elevate">
-                  <div className="mt-1">
-                    {getStatusIcon(activity.status)}
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-medium">{activity.title}</h4>
-                      <Badge variant="outline" className="text-xs">
-                        {activity.type}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{activity.description}</p>
-                    <p className="text-xs text-muted-foreground">{activity.timestamp}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Help Section */}
       <Card>
         <CardHeader>
           <CardTitle>Kom igång</CardTitle>
           <CardDescription>
-            Första gången du använder systemet? Här är några tips för att komma igång snabbt.
+            Välj en åtgärd för att börja arbeta med krav
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 font-medium">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {quickActions.map((action) => (
+              <Button
+                key={action.title}
+                variant={action.variant}
+                size="lg"
+                onClick={() => window.location.href = action.href}
+                className="h-auto p-4 justify-start"
+                data-testid={action.testId}
+              >
+                <div className="flex items-center gap-4 w-full">
+                  <action.icon className="h-6 w-6 flex-shrink-0" />
+                  <div className="text-left flex-1">
+                    <div className="font-medium">{action.title}</div>
+                    <div className="text-sm opacity-70">{action.description}</div>
+                  </div>
+                  <ArrowRight className="h-4 w-4 flex-shrink-0" />
+                </div>
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Features */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {features.map((feature, index) => (
+          <Card key={index}>
+            <CardContent className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <feature.icon className="h-6 w-6 text-primary" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="font-semibold">{feature.title}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {feature.description}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Getting Started Guide */}
+      {stats.totalRequirements === 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Kom igång i 3 steg
+            </CardTitle>
+            <CardDescription>
+              Så här börjar du använda kravanalysverktyget
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-bold">
                   1
-                </span>
-                Importera krav
+                </div>
+                <div>
+                  <h4 className="font-medium">Importera Excel-fil</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Ladda upp en Excel-fil med krav från er organisation. 
+                    Systemet identifierar automatiskt svenska kolumnnamn.
+                  </p>
+                </div>
               </div>
-              <p className="text-muted-foreground ml-8">
-                Börja med att ladda upp en Excel-fil med dina krav via Import-sektionen.
-              </p>
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 font-medium">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+              
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-bold">
                   2
-                </span>
-                Kör AI-analys
+                </div>
+                <div>
+                  <h4 className="font-medium">Kör AI-gruppering</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Låt AI:n analysera och gruppera liknande krav automatiskt. 
+                    Detta sparar tid och ger bättre översikt.
+                  </p>
+                </div>
               </div>
-              <p className="text-muted-foreground ml-8">
-                Använd AI-gruppering för att automatiskt identifiera och gruppera liknande krav.
-              </p>
+              
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-bold">
+                  3
+                </div>
+                <div>
+                  <h4 className="font-medium">Analysera resultat</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Se statistik, rapporter och detaljerade analyser av era krav. 
+                    Exportera resultat för vidare bearbetning.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-6 pt-4 border-t">
+              <Button 
+                onClick={() => window.location.href = '/import'}
+                className="w-full"
+                data-testid="button-get-started"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Börja med att importera en fil
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* System Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Om systemet</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+            <div className="space-y-2">
+              <h4 className="font-medium">Filformat som stöds:</h4>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>• Microsoft Excel (.xlsx, .xls)</li>
+                <li>• Automatisk kolumnidentifiering</li>
+                <li>• Svenska headers och värden</li>
+              </ul>
             </div>
             
             <div className="space-y-2">
-              <div className="flex items-center gap-2 font-medium">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                  3
-                </span>
-                Granska och hantera
-              </div>
-              <p className="text-muted-foreground ml-8">
-                Se kravsammanställningen för att granska, kommentera och sätta status på krav.
-              </p>
+              <h4 className="font-medium">AI-funktioner:</h4>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>• GPT-5 textanalys</li>
+                <li>• Automatisk kategorisering</li>
+                <li>• Dubblettdetektering</li>
+                <li>• Semantisk gruppering</li>
+              </ul>
+            </div>
+            
+            <div className="space-y-2">
+              <h4 className="font-medium">Rapporter:</h4>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>• Organisationsstatistik</li>
+                <li>• Kravtypsanalys</li>
+                <li>• Trendrapporter</li>
+                <li>• Excel-export</li>
+              </ul>
             </div>
           </div>
         </CardContent>
@@ -271,4 +303,4 @@ export function Home() {
   );
 }
 
-export default Home;
+export default HomePage;

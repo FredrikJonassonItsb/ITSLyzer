@@ -1,1 +1,374 @@
-import { useState } from 'react';\nimport { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';\nimport { Progress } from '@/components/ui/progress';\nimport { Badge } from '@/components/ui/badge';\nimport { Separator } from '@/components/ui/separator';\nimport { FileUpload } from '@/components/file-upload';\nimport { CheckCircle, AlertCircle, Clock, FileSpreadsheet, Brain, Building } from 'lucide-react';\n\ntype ImportStage = 'upload' | 'parsing' | 'analyzing' | 'complete' | 'error';\n\ninterface ImportResult {\n  totalRequirements: number;\n  newRequirements: number;\n  duplicates: number;\n  categories: string[];\n  organization: string;\n  processingTime: number;\n  aiGroupsFound?: number;\n}\n\nexport function ImportPage() {\n  const [currentStage, setCurrentStage] = useState<ImportStage>('upload');\n  const [progress, setProgress] = useState(0);\n  const [isUploading, setIsUploading] = useState(false);\n  const [importResult, setImportResult] = useState<ImportResult | null>(null);\n  const [errorMessage, setErrorMessage] = useState('');\n\n  const handleFileSelect = async (file: File, metadata: { organization: string; description?: string }) => {\n    console.log('Starting import for file:', file.name, 'Organization:', metadata.organization);\n    \n    setIsUploading(true);\n    setCurrentStage('parsing');\n    setProgress(0);\n    setImportResult(null);\n    setErrorMessage('');\n\n    try {\n      // Simulate file parsing\n      await simulateProgress('parsing', 25);\n      \n      // Simulate AI analysis\n      setCurrentStage('analyzing');\n      await simulateProgress('analyzing', 75);\n      \n      // Complete with results\n      setCurrentStage('complete');\n      setProgress(100);\n      \n      // Mock results\n      const mockResult: ImportResult = {\n        totalRequirements: 145,\n        newRequirements: 67,\n        duplicates: 12,\n        categories: ['Säkerhet', 'Integration', 'Backup', 'GDPR', 'API'],\n        organization: metadata.organization,\n        processingTime: 2.3,\n        aiGroupsFound: 18\n      };\n      \n      setImportResult(mockResult);\n      \n    } catch (error) {\n      console.error('Import failed:', error);\n      setCurrentStage('error');\n      setErrorMessage('Import misslyckades. Kontrollera filformat och innehåll.');\n    } finally {\n      setIsUploading(false);\n    }\n  };\n\n  const simulateProgress = (stage: string, targetProgress: number): Promise<void> => {\n    return new Promise((resolve) => {\n      const interval = setInterval(() => {\n        setProgress(prev => {\n          if (prev >= targetProgress) {\n            clearInterval(interval);\n            resolve();\n            return targetProgress;\n          }\n          return prev + Math.random() * 5;\n        });\n      }, 100);\n    });\n  };\n\n  const getStageIcon = (stage: ImportStage) => {\n    switch (stage) {\n      case 'parsing': return <FileSpreadsheet className=\"h-5 w-5 animate-spin\" />;\n      case 'analyzing': return <Brain className=\"h-5 w-5 animate-pulse\" />;\n      case 'complete': return <CheckCircle className=\"h-5 w-5 text-green-600\" />;\n      case 'error': return <AlertCircle className=\"h-5 w-5 text-red-600\" />;\n      default: return <Clock className=\"h-5 w-5\" />;\n    }\n  };\n\n  const getStageDescription = (stage: ImportStage) => {\n    switch (stage) {\n      case 'parsing': return 'Läser Excel-fil och extraherar krav...';\n      case 'analyzing': return 'AI analyserar krav för gruppering och kategorisering...';\n      case 'complete': return 'Import slutförd framgångsrikt!';\n      case 'error': return 'Ett fel uppstod under importen.';\n      default: return 'Redo att importera fil.';\n    }\n  };\n\n  return (\n    <div className=\"p-6 max-w-4xl mx-auto space-y-8\">\n      {/* Header */}\n      <div className=\"space-y-2\">\n        <h1 className=\"text-3xl font-bold\">Importera Excel-fil</h1>\n        <p className=\"text-muted-foreground\">\n          Ladda upp en Excel-fil med krav för automatisk analys och kategorisering.\n        </p>\n      </div>\n\n      {/* File Upload */}\n      <div className=\"flex justify-center\">\n        <FileUpload \n          onFileSelect={handleFileSelect}\n          isUploading={isUploading}\n        />\n      </div>\n\n      {/* Progress Section */}\n      {(isUploading || currentStage !== 'upload') && (\n        <Card>\n          <CardHeader>\n            <CardTitle className=\"flex items-center gap-2\">\n              {getStageIcon(currentStage)}\n              Importstatus\n            </CardTitle>\n            <CardDescription>\n              {getStageDescription(currentStage)}\n            </CardDescription>\n          </CardHeader>\n          <CardContent className=\"space-y-4\">\n            {isUploading && (\n              <div className=\"space-y-2\">\n                <div className=\"flex justify-between text-sm\">\n                  <span>Framsteg</span>\n                  <span>{Math.round(progress)}%</span>\n                </div>\n                <Progress value={progress} className=\"w-full\" data-testid=\"import-progress\" />\n              </div>\n            )}\n            \n            {/* Stage indicators */}\n            <div className=\"flex items-center justify-between\">\n              <div className=\"flex items-center gap-2\">\n                <div className={`w-3 h-3 rounded-full ${\n                  ['parsing', 'analyzing', 'complete'].includes(currentStage) \n                    ? 'bg-green-500' \n                    : currentStage === 'error' \n                    ? 'bg-red-500' \n                    : 'bg-muted'\n                }`} />\n                <span className=\"text-sm\">Parsing</span>\n              </div>\n              \n              <div className=\"flex items-center gap-2\">\n                <div className={`w-3 h-3 rounded-full ${\n                  ['analyzing', 'complete'].includes(currentStage) \n                    ? 'bg-green-500' \n                    : currentStage === 'error' \n                    ? 'bg-red-500' \n                    : 'bg-muted'\n                }`} />\n                <span className=\"text-sm\">AI-analys</span>\n              </div>\n              \n              <div className=\"flex items-center gap-2\">\n                <div className={`w-3 h-3 rounded-full ${\n                  currentStage === 'complete' \n                    ? 'bg-green-500' \n                    : currentStage === 'error' \n                    ? 'bg-red-500' \n                    : 'bg-muted'\n                }`} />\n                <span className=\"text-sm\">Klar</span>\n              </div>\n            </div>\n          </CardContent>\n        </Card>\n      )}\n\n      {/* Error Message */}\n      {currentStage === 'error' && (\n        <Card className=\"border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950\">\n          <CardContent className=\"pt-6\">\n            <div className=\"flex items-center gap-2 text-red-600 dark:text-red-400\">\n              <AlertCircle className=\"h-5 w-5\" />\n              <span className=\"font-medium\">Import misslyckades</span>\n            </div>\n            <p className=\"text-sm mt-2 text-red-600 dark:text-red-400\">\n              {errorMessage}\n            </p>\n          </CardContent>\n        </Card>\n      )}\n\n      {/* Results */}\n      {importResult && currentStage === 'complete' && (\n        <Card>\n          <CardHeader>\n            <CardTitle className=\"flex items-center gap-2\">\n              <CheckCircle className=\"h-5 w-5 text-green-600\" />\n              Import slutförd\n            </CardTitle>\n            <CardDescription>\n              Filen har bearbetats framgångsrikt i {importResult.processingTime} sekunder.\n            </CardDescription>\n          </CardHeader>\n          <CardContent className=\"space-y-6\">\n            {/* Summary Stats */}\n            <div className=\"grid grid-cols-2 md:grid-cols-4 gap-4\">\n              <div className=\"text-center p-4 bg-muted rounded-lg\">\n                <div className=\"text-2xl font-bold\" data-testid=\"result-total-requirements\">\n                  {importResult.totalRequirements}\n                </div>\n                <div className=\"text-sm text-muted-foreground\">Totalt krav</div>\n              </div>\n              <div className=\"text-center p-4 bg-green-50 dark:bg-green-950 rounded-lg\">\n                <div className=\"text-2xl font-bold text-green-600\" data-testid=\"result-new-requirements\">\n                  {importResult.newRequirements}\n                </div>\n                <div className=\"text-sm text-muted-foreground\">Nya krav</div>\n              </div>\n              <div className=\"text-center p-4 bg-muted rounded-lg\">\n                <div className=\"text-2xl font-bold\" data-testid=\"result-duplicates\">\n                  {importResult.duplicates}\n                </div>\n                <div className=\"text-sm text-muted-foreground\">Dubbletter</div>\n              </div>\n              <div className=\"text-center p-4 bg-blue-50 dark:bg-blue-950 rounded-lg\">\n                <div className=\"text-2xl font-bold text-blue-600\" data-testid=\"result-ai-groups\">\n                  {importResult.aiGroupsFound || 0}\n                </div>\n                <div className=\"text-sm text-muted-foreground\">AI-grupper</div>\n              </div>\n            </div>\n\n            <Separator />\n\n            {/* Details */}\n            <div className=\"space-y-4\">\n              <div className=\"flex items-center gap-2\">\n                <Building className=\"h-4 w-4\" />\n                <span className=\"text-sm font-medium\">Organisation:</span>\n                <Badge variant=\"outline\">{importResult.organization}</Badge>\n              </div>\n              \n              <div>\n                <span className=\"text-sm font-medium\">Identifierade kategorier:</span>\n                <div className=\"flex flex-wrap gap-2 mt-2\">\n                  {importResult.categories.map(category => (\n                    <Badge key={category} variant=\"secondary\" className=\"text-xs\">\n                      {category}\n                    </Badge>\n                  ))}\n                </div>\n              </div>\n            </div>\n\n            <Separator />\n\n            {/* Next Steps */}\n            <div className=\"bg-blue-50 dark:bg-blue-950 p-4 rounded-lg\">\n              <h4 className=\"font-medium mb-2\">Nästa steg:</h4>\n              <ul className=\"text-sm space-y-1 text-muted-foreground\">\n                <li>• Granska kravsammanställningen för att se alla importerade krav</li>\n                <li>• Använd AI-grupperingen för att optimera liknande krav</li>\n                <li>• Sätt status och lägg till kommentarer för varje krav</li>\n                <li>• Se statistiken för en översikt av dina krav</li>\n              </ul>\n            </div>\n          </CardContent>\n        </Card>\n      )}\n\n      {/* Instructions */}\n      {currentStage === 'upload' && (\n        <Card>\n          <CardHeader>\n            <CardTitle>Instruktioner</CardTitle>\n            <CardDescription>\n              Tips för att förbereda din Excel-fil för optimal import.\n            </CardDescription>\n          </CardHeader>\n          <CardContent>\n            <div className=\"space-y-4 text-sm\">\n              <div>\n                <h4 className=\"font-medium mb-2\">Filformat:</h4>\n                <ul className=\"text-muted-foreground space-y-1 ml-4\">\n                  <li>• Stöds: Excel (.xlsx, .xls) filer</li>\n                  <li>• Första raden ska innehålla kolumnrubriker</li>\n                  <li>• Kravtexten ska finnas i en tydligt märkt kolumn</li>\n                </ul>\n              </div>\n              \n              <div>\n                <h4 className=\"font-medium mb-2\">Rekommenderade kolumner:</h4>\n                <ul className=\"text-muted-foreground space-y-1 ml-4\">\n                  <li>• \"Krav\" eller \"Kravtext\" - Själva kravet</li>\n                  <li>• \"Typ\" - Skall eller Bör</li>\n                  <li>• \"Kategori\" - Kravkategori</li>\n                  <li>• \"Kommentar\" - Eventuella kommentarer</li>\n                </ul>\n              </div>\n              \n              <div>\n                <h4 className=\"font-medium mb-2\">AI-analys:</h4>\n                <ul className=\"text-muted-foreground space-y-1 ml-4\">\n                  <li>• Systemet identifierar automatiskt liknande krav</li>\n                  <li>• Krav grupperas baserat på innehåll och kategori</li>\n                  <li>• Svensk språkhantering (åäö-normalisering) stöds</li>\n                </ul>\n              </div>\n            </div>\n          </CardContent>\n        </Card>\n      )}\n    </div>\n  );\n}\n\nexport default ImportPage;
+import { useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { CheckCircle, AlertCircle, Clock, FileSpreadsheet, Upload, Building, FileText } from 'lucide-react';
+
+type ImportStage = 'upload' | 'parsing' | 'analyzing' | 'complete' | 'error';
+
+interface ImportResult {
+  totalRequirements: number;
+  newRequirements: number;
+  duplicates: number;
+  categories: string[];
+  organization: string;
+  processingTime: number;
+  aiGroupsFound?: number;
+}
+
+export function ImportPage() {
+  const [currentStage, setCurrentStage] = useState<ImportStage>('upload');
+  const [progress, setProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [organization, setOrganization] = useState('');
+  const [description, setDescription] = useState('');
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile || !organization.trim()) {
+      setErrorMessage('Välj en fil och ange organisation');
+      return;
+    }
+
+    setIsUploading(true);
+    setCurrentStage('parsing');
+    setProgress(0);
+    setImportResult(null);
+    setErrorMessage('');
+
+    try {
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('organization', organization.trim());
+      if (description.trim()) {
+        formData.append('description', description.trim());
+      }
+
+      // Simulate progress
+      const progressInterval = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 500);
+
+      // Upload file
+      const response = await fetch('/api/import', {
+        method: 'POST',
+        body: formData
+      });
+
+      clearInterval(progressInterval);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Import misslyckades');
+      }
+
+      const result = await response.json();
+      
+      setProgress(100);
+      setCurrentStage('complete');
+      setImportResult(result);
+      
+      // Reset form
+      setSelectedFile(null);
+      setOrganization('');
+      setDescription('');
+      
+    } catch (error) {
+      console.error('Import error:', error);
+      setCurrentStage('error');
+      setErrorMessage(error instanceof Error ? error.message : 'Okänt fel inträffade');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const resetImport = () => {
+    setCurrentStage('upload');
+    setProgress(0);
+    setImportResult(null);
+    setErrorMessage('');
+    setSelectedFile(null);
+    setOrganization('');
+    setDescription('');
+  };
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto space-y-8">
+      {/* Header */}
+      <div className="space-y-2">
+        <h1 className="text-3xl font-semibold">Importera Excel-fil</h1>
+        <p className="text-muted-foreground">
+          Ladda upp en Excel-fil med krav för analys och gruppering.
+        </p>
+      </div>
+
+      {/* Main Import Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-3">
+            <Upload className="h-6 w-6" />
+            Filimport och analys
+          </CardTitle>
+          <CardDescription>
+            Stöder .xlsx och .xls filer med svenska headers
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Upload Form */}
+          {currentStage === 'upload' && (
+            <div className="space-y-6">
+              {/* File Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="file-upload">Excel-fil *</Label>
+                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+                  <FileSpreadsheet className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <Input
+                    id="file-upload"
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    data-testid="input-file"
+                  />
+                  <Label 
+                    htmlFor="file-upload" 
+                    className="cursor-pointer text-sm font-medium hover:text-primary"
+                  >
+                    Klicka för att välja fil eller dra och släpp
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Endast .xlsx och .xls filer
+                  </p>
+                  {selectedFile && (
+                    <div className="mt-3 p-2 bg-muted rounded flex items-center gap-2 text-sm">
+                      <FileText className="h-4 w-4" />
+                      {selectedFile.name}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Organization */}
+              <div className="space-y-2">
+                <Label htmlFor="organization">Organisation *</Label>
+                <Input
+                  id="organization"
+                  value={organization}
+                  onChange={(e) => setOrganization(e.target.value)}
+                  placeholder="T.ex. Karolinska Universitetssjukhuset"
+                  data-testid="input-organization"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Namnet på organisationen som äger dessa krav
+                </p>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-2">
+                <Label htmlFor="description">Beskrivning (valfritt)</Label>
+                <Textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Kortfattad beskrivning av vad som importeras..."
+                  rows={3}
+                  data-testid="textarea-description"
+                />
+              </div>
+
+              {/* Upload Button */}
+              <Button 
+                onClick={handleUpload}
+                disabled={!selectedFile || !organization.trim() || isUploading}
+                className="w-full"
+                data-testid="button-upload"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Starta import
+              </Button>
+            </div>
+          )}
+
+          {/* Progress States */}
+          {(currentStage === 'parsing' || currentStage === 'analyzing') && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <Clock className="h-5 w-5 animate-spin text-primary" />
+                <span className="font-medium">
+                  {currentStage === 'parsing' ? 'Läser Excel-fil...' : 'Analyserar krav...'}
+                </span>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Bearbetar {selectedFile?.name}</span>
+                  <span>{progress}%</span>
+                </div>
+                <Progress value={progress} className="w-full" />
+              </div>
+
+              <div className="text-sm text-muted-foreground">
+                {currentStage === 'parsing' && (
+                  <p>Identifierar kolumner och extraherar kravtext från Excel-filen...</p>
+                )}
+                {currentStage === 'analyzing' && (
+                  <p>Analyserar krav och identifierar kategorier och duplikater...</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Success State */}
+          {currentStage === 'complete' && importResult && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
+                <CheckCircle className="h-6 w-6 text-green-600" />
+                <div>
+                  <h4 className="font-medium text-green-900 dark:text-green-100">
+                    Import slutförd!
+                  </h4>
+                  <p className="text-sm text-green-700 dark:text-green-300">
+                    {importResult.totalRequirements} krav importerade från {importResult.organization}
+                  </p>
+                </div>
+              </div>
+
+              {/* Import Results */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <p className="text-2xl font-bold text-blue-600">{importResult.totalRequirements}</p>
+                    <p className="text-sm text-muted-foreground">Totalt krav</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <p className="text-2xl font-bold text-green-600">{importResult.newRequirements}</p>
+                    <p className="text-sm text-muted-foreground">Nya krav</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <p className="text-2xl font-bold text-orange-600">{importResult.duplicates}</p>
+                    <p className="text-sm text-muted-foreground">Duplikater</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Categories */}
+              {importResult.categories.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-3">Identifierade kategorier:</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {importResult.categories.map(category => (
+                      <Badge key={category} variant="secondary">
+                        {category}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-4">
+                <Button 
+                  onClick={() => window.location.href = '/requirements'}
+                  className="flex-1"
+                  data-testid="button-view-requirements"
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Se importerade krav
+                </Button>
+                
+                <Button variant="outline" onClick={resetImport}>
+                  Importera fler
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Error State */}
+          {currentStage === 'error' && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
+                <AlertCircle className="h-6 w-6 text-red-600" />
+                <div>
+                  <h4 className="font-medium text-red-900 dark:text-red-100">
+                    Import misslyckades
+                  </h4>
+                  <p className="text-sm text-red-700 dark:text-red-300">
+                    {errorMessage}
+                  </p>
+                </div>
+              </div>
+
+              <Button variant="outline" onClick={resetImport} className="w-full">
+                Försök igen
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Instructions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Instruktioner för Excel-filer</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+            <div className="space-y-2">
+              <h4 className="font-medium">Obligatoriska kolumner:</h4>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>• Kravtext eller liknande</li>
+                <li>• Organisation eller Kund</li>
+                <li>• Krav-ID eller identifierare</li>
+              </ul>
+            </div>
+            
+            <div className="space-y-2">
+              <h4 className="font-medium">Valfria kolumner:</h4>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>• Kravtyp (Skall/Bör)</li>
+                <li>• Kategori eller Område</li>
+                <li>• Kommentarer</li>
+                <li>• Status eller Bedömning</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+            <p className="text-sm">
+              <strong>Tips:</strong> Systemet identifierar automatiskt svenska kolumnnamn som 
+              "Krav", "Kravtext", "Beskrivning", "Organisation", "Kund", "Typ", etc.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default ImportPage;

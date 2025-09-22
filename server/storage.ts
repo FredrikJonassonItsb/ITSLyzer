@@ -138,7 +138,7 @@ export class DatabaseStorage implements IStorage {
     const categoryStats = await db.execute(sql`
       SELECT category AS name, COUNT(*) as count
       FROM requirements, jsonb_array_elements_text(categories::jsonb) AS category
-      WHERE categories IS NOT NULL AND categories != '[]'::jsonb
+      WHERE categories IS NOT NULL AND jsonb_array_length(categories::jsonb) > 0
       GROUP BY category
       ORDER BY count DESC
     `);
@@ -147,7 +147,7 @@ export class DatabaseStorage implements IStorage {
     const organizationStats = await db.execute(sql`
       SELECT org AS name, COUNT(*) as count  
       FROM requirements, jsonb_array_elements_text(organizations::jsonb) AS org
-      WHERE organizations IS NOT NULL AND organizations != '[]'::jsonb
+      WHERE organizations IS NOT NULL AND jsonb_array_length(organizations::jsonb) > 0
       GROUP BY org
       ORDER BY count DESC
     `);

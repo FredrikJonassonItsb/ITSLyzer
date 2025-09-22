@@ -34,10 +34,10 @@ export const requirements = pgTable("requirements", {
   category_label: text("category_label"),
   
   // Import handling
-  import_organization: text("import_organization"), // Organization for imported file (mandatory)
-  import_date: text("import_date"),                 // Import date
-  requirement_type: text("requirement_type"),       // "Skall" eller "Bör"
-  requirement_category: text("requirement_category")// Category from Excel headers
+  import_organization: text("import_organization").notNull(), // Organization for imported file (mandatory)
+  import_date: text("import_date"),                           // Import date
+  requirement_type: text("requirement_type"),                 // "Skall" eller "Bör"
+  requirement_category: text("requirement_category")          // Category from Excel headers
 });
 
 export type Requirement = typeof requirements.$inferSelect;

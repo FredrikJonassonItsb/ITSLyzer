@@ -11,6 +11,7 @@ export interface IStorage {
   createRequirement(requirement: InsertRequirement): Promise<Requirement>;
   updateRequirement(id: string, updates: Partial<Requirement>): Promise<Requirement | undefined>;
   deleteRequirement(id: string): Promise<boolean>;
+  deleteAllRequirements(): Promise<boolean>;
   
   // Bulk operations
   createManyRequirements(requirements: InsertRequirement[]): Promise<Requirement[]>;
@@ -109,6 +110,11 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .delete(requirements)
       .where(eq(requirements.id, id));
+    return (result.rowCount || 0) > 0;
+  }
+
+  async deleteAllRequirements(): Promise<boolean> {
+    const result = await db.delete(requirements);
     return (result.rowCount || 0) > 0;
   }
 

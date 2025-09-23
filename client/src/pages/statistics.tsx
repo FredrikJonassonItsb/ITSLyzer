@@ -1,12 +1,17 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { BarChart3, PieChart, TrendingUp, Download, Building, FileText, Users, Calendar } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { BarChart3, PieChart, TrendingUp, Download, Building, FileText, Users, Calendar, Trash2 } from 'lucide-react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { queryClient, apiRequest } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import type { Statistics, Requirement } from '@shared/schema';
 
 export function StatisticsPage() {
+  const { toast } = useToast();
+
   // Fetch statistics
   const { data: statistics, isLoading } = useQuery<Statistics>({
     queryKey: ['/api/statistics'],
@@ -17,6 +22,34 @@ export function StatisticsPage() {
   const { data: requirements = [] } = useQuery<Requirement[]>({
     queryKey: ['/api/requirements'],
     enabled: true
+  });
+
+  // Delete all requirements mutation
+  const deleteAllMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('DELETE', '/api/requirements', {
+        confirmToken: "DELETE_ALL_REQUIREMENTS_CONFIRMED"
+      });
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      // Invalidate all relevant caches
+      queryClient.invalidateQueries({ queryKey: ['/api/requirements'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/statistics'] });
+      
+      toast({
+        title: "Databas nollställd",
+        description: data.message || "Alla krav har raderats från databasen",
+      });
+    },
+    onError: (error) => {
+      console.error('Error deleting all requirements:', error);
+      toast({
+        title: "Fel vid nollställning",
+        description: "Kunde inte radera alla krav från databasen",
+        variant: "destructive",
+      });
+    },
   });
 
   const handleExport = () => {
@@ -149,10 +182,59 @@ export function StatisticsPage() {
           </p>
         </div>
         
-        <Button variant="outline" onClick={handleExport} data-testid="button-export">
-          <Download className="h-4 w-4 mr-2" />
-          Exportera rapport
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={handleExport} data-testid="button-export">
+            <Download className="h-4 w-4 mr-2" />
+            Exportera rapport
+          </Button>
+          
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button 
+                variant="destructive" 
+                disabled={deleteAllMutation.isPending || stats.totalRequirements === 0}
+                data-testid="button-reset-database"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Nollställ databas
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>⚠️ Nollställ hela databasen</AlertDialogTitle>
+                <AlertDialogDescription className="space-y-3">
+                  <p className="text-destructive font-medium">
+                    VARNING: Denna åtgärd raderar ALLA krav permanent och kan inte ångras!
+                  </p>
+                  <div className="bg-muted p-3 rounded">
+                    <p className="text-sm">
+                      Detta kommer att radera:
+                    </p>
+                    <ul className="text-sm mt-2 space-y-1">
+                      <li>• <strong>{stats.totalRequirements}</strong> krav totalt</li>
+                      <li>• <strong>{stats.groups}</strong> AI-grupper</li>
+                      <li>• Data från <strong>{stats.organizations}</strong> organisationer</li>
+                      <li>• Alla kommentarer och status</li>
+                    </ul>
+                  </div>
+                  <p className="text-sm">
+                    Är du absolut säker på att du vill fortsätta?
+                  </p>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deleteAllMutation.mutate()}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  data-testid="button-confirm-reset"
+                >
+                  {deleteAllMutation.isPending ? "Raderar..." : "Ja, radera allt"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </div>
 
       {/* Main Stats */}

@@ -242,6 +242,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete all requirements - DESTRUCTIVE OPERATION WITH SECURITY
+  app.delete("/api/requirements", async (req, res) => {
+    try {
+      // Security check: require confirmation token
+      const { confirmToken } = req.body;
+      if (confirmToken !== "DELETE_ALL_REQUIREMENTS_CONFIRMED") {
+        console.log("🚨 SECURITY: Unauthorized deletion attempt - missing confirmation token");
+        return res.status(403).json({ 
+          error: "Otillåten åtgärd", 
+          details: "Bekräftelsetoken krävs för att radera alla krav" 
+        });
+      }
+
+      console.log("🚨 DESTRUCTIVE: Deleting all requirements from database (authorized)");
+      const success = await storage.deleteAllRequirements();
+      
+      if (success) {
+        console.log("✅ All requirements deleted successfully");
+        res.json({ 
+          success: true, 
+          message: "Alla krav har raderats från databasen",
+          deletedCount: "all"
+        });
+      } else {
+        res.json({ 
+          success: true, 
+          message: "Inga krav att radera - databasen var redan tom",
+          deletedCount: 0
+        });
+      }
+    } catch (error) {
+      console.error("❌ Error deleting all requirements:", error);
+      res.status(500).json({ error: "Kunde inte radera alla krav" });
+    }
+  });
+
   // Statistics API
   app.get("/api/statistics", async (req, res) => {
     try {

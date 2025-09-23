@@ -16,37 +16,61 @@ export class OpenAIService {
 
   /**
    * Group similar requirements using AI analysis with retry and consolidation
-   * Analyzes requirement text in Swedish and groups similar ones together
+   * Groups requirements per category with high sensitivity for similarity
    */
   async groupRequirements(requirements: Requirement[]): Promise<GroupingResult> {
     if (!requirements.length) {
       return { groups: [], ungroupedRequirements: [] };
     }
 
-    // Limit batch size to avoid token limits
-    const BATCH_SIZE = 30; // Reduced for better quality
+    // First group requirements by category
+    const categoryGroups = new Map<string, Requirement[]>();
+    requirements.forEach(req => {
+      const category = req.requirement_category || 'Okategoriserad';
+      if (!categoryGroups.has(category)) {
+        categoryGroups.set(category, []);
+      }
+      categoryGroups.get(category)!.push(req);
+    });
+
     const allGroups: RequirementGroup[] = [];
     const ungroupedRequirements: string[] = [];
 
-    // Process in batches with retry
-    for (let i = 0; i < requirements.length; i += BATCH_SIZE) {
-      const batch = requirements.slice(i, i + BATCH_SIZE);
-      const batchResult = await this.groupRequirementsBatchWithRetry(batch);
+    // Process each category separately with high sensitivity
+    for (const [category, categoryRequirements] of Array.from(categoryGroups.entries())) {
+      console.log(`🏷️ Processing category: ${category} (${categoryRequirements.length} requirements)`);
       
-      // Generate unique group IDs for this batch
-      batchResult.groups.forEach(group => {
-        group.groupId = this.generateUniqueGroupId();
-      });
-      
-      allGroups.push(...batchResult.groups);
-      ungroupedRequirements.push(...batchResult.ungroupedRequirements);
+      // Skip categories with less than 2 requirements (can't group)
+      if (categoryRequirements.length < 2) {
+        ungroupedRequirements.push(...categoryRequirements.map(req => req.id));
+        continue;
+      }
+
+      // Process category in smaller batches for better quality
+      const BATCH_SIZE = 20; // Smaller batches for higher quality within categories
+      for (let i = 0; i < categoryRequirements.length; i += BATCH_SIZE) {
+        const batch = categoryRequirements.slice(i, i + BATCH_SIZE);
+        
+        // Skip batches with less than 2 requirements
+        if (batch.length < 2) {
+          ungroupedRequirements.push(...batch.map(req => req.id));
+          continue;
+        }
+
+        const batchResult = await this.groupRequirementsBatchWithRetry(batch);
+        
+        // Generate unique group IDs for this batch
+        batchResult.groups.forEach(group => {
+          group.groupId = this.generateUniqueGroupId();
+          group.category = category; // Ensure category is preserved
+        });
+        
+        allGroups.push(...batchResult.groups);
+        ungroupedRequirements.push(...batchResult.ungroupedRequirements);
+      }
     }
 
-    // Consolidate cross-batch similar groups if we have multiple batches
-    if (requirements.length > BATCH_SIZE && allGroups.length > 1) {
-      return await this.consolidateGroups(allGroups, ungroupedRequirements, requirements);
-    }
-
+    console.log(`🎯 AI grouping completed: ${allGroups.length} groups across ${categoryGroups.size} categories`);
     return { groups: allGroups, ungroupedRequirements };
   }
 
@@ -139,17 +163,19 @@ export class OpenAIService {
         category: req.requirement_category
       }));
 
-      const prompt = `Du är en expert på svensk upphandling och kravanalys. Analysera följande lista med IT-krav och gruppera dem baserat på liknande funktionalitet eller teknikområde.
+      const prompt = `Du är en expert på svensk upphandling och kravanalys. Analysera följande lista med IT-krav och gruppera dem baserat på mycket hög likhet inom SAMMA kategori.
 
 Krav att analysera:
 ${requirementTexts.map((req, idx) => `${idx + 1}. [ID: ${req.id}] ${req.text} (Typ: ${req.type || 'Okänd'}, Kategori: ${req.category || 'Okänd'})`).join('\n')}
 
-Instruktioner:
-1. Gruppera krav som handlar om samma tekniska område eller funktionalitet
-2. En grupp ska ha minst 2 krav för att vara meningsfull
-3. Välj ett representativt krav för varje grupp (vanligast förekommande eller mest beskrivande)
-4. Beräkna en likhetspoäng 0-100 för varje grupp baserat på hur lika kraven är
-5. Föreslå en kategori/tema för varje grupp
+KRITISKA INSTRUKTIONER:
+1. **ENDAST GRUPPERA KRAV INOM SAMMA KATEGORI** - Krav från olika kategorier får ALDRIG grupperas tillsammans
+2. **HÖG KÄNSLIGHET** - Gruppera endast krav som är nästan identiska eller extremt lika (80%+ likhet)
+3. **Strikt likhetsbedömning** - Krav måste ha mycket liknande ordval, struktur och specifik funktionalitet
+4. En grupp ska ha minst 2 krav för att vara meningsfull
+5. Välj det mest representativa kravet för varje grupp (tydligast formulerat)
+6. Beräkna en likhetspoäng 80-100 för varje grupp (under 80 ska ej grupperas)
+7. Använd exakt samma kategorinamn som anges för kraven
 
 Svara med JSON i följande format:
 {
@@ -159,13 +185,13 @@ Svara med JSON i följande format:
       "representativeId": "krav-id-för-representativt-krav",
       "members": ["krav-id-1", "krav-id-2", "krav-id-3"],
       "similarityScore": 85,
-      "category": "Säkerhet och autentisering"
+      "category": "Exakt samma kategorinamn från input"
     }
   ],
-  "ungroupedRequirements": ["krav-id-som-inte-passar-någon-grupp"]
+  "ungroupedRequirements": ["krav-id-som-inte-passar-strikt-gruppering"]
 }
 
-Gruppera endast krav som verkligen är relaterade. Lämna krav ogruperade om de inte passar naturligt ihop med andra.`;
+VAR MYCKET SELEKTIV - Hellre för få grupper än för många. Lämna krav ogruperade om de inte uppfyller de höga kraven på likhet INOM SAMMA KATEGORI.`;
 
       // Add timeout to prevent hanging
       const controller = new AbortController();
@@ -190,7 +216,7 @@ Gruppera endast krav som verkligen är relaterade. Lämna krav ogruperade om de 
         clearTimeout(timeoutId);
       } catch (error) {
         clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
+        if ((error as any).name === 'AbortError') {
           throw new Error('OpenAI API call timed out after 60 seconds');
         }
         throw error;
@@ -229,7 +255,7 @@ Gruppera endast krav som verkligen är relaterade. Lämna krav ogruperade om de 
       return { groups, ungroupedRequirements };
 
     } catch (error) {
-      console.error("Error in AI grouping:", error);
+      console.error("Error in AI grouping:", error as Error);
       
       // Fallback: return all requirements as ungrouped
       return {
@@ -284,7 +310,7 @@ Svara endast med kategorins namn (max 3 ord).`;
         clearTimeout(timeoutId);
       } catch (error) {
         clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
+        if ((error as any).name === 'AbortError') {
           throw new Error('OpenAI API call timed out after 30 seconds');
         }
         throw error;
@@ -293,7 +319,7 @@ Svara endast med kategorins namn (max 3 ord).`;
       return response.choices[0].message.content?.trim() || 'Okategoriserad';
 
     } catch (error) {
-      console.error("Error categorizing requirement:", error);
+      console.error("Error categorizing requirement:", error as Error);
       return 'Okategoriserad';
     }
   }
@@ -336,7 +362,7 @@ Skapa en sammanfattning på 2-3 meningar om grupperingsresultatet och dess nytta
         clearTimeout(timeoutId);
       } catch (error) {
         clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
+        if ((error as any).name === 'AbortError') {
           throw new Error('OpenAI API call timed out after 30 seconds');
         }
         throw error;

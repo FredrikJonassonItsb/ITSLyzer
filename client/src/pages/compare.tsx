@@ -24,6 +24,7 @@ interface CompareResult {
   matchedRequirements: Requirement[];
   isIdentical: boolean;
   similarityScore?: number;
+  aiGroupedRequirements?: Requirement[];
 }
 
 export function ComparePage() {
@@ -34,8 +35,7 @@ export function ComparePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [requirementChanges, setRequirementChanges] = useState<Map<string, { comment: string; status: string }>>(new Map());
   const [isSavingToDatabase, setIsSavingToDatabase] = useState(false);
-  const [currentSheetPages, setCurrentSheetPages] = useState<Map<string, number>>(new Map());
-  const [resultsPerPage] = useState(10); // Configurable per-page count
+  const [activeTab, setActiveTab] = useState<string>(''); // Currently active sheet tab
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -52,36 +52,10 @@ export function ComparePage() {
   };
 
 
-  // Get safe current page for a sheet with clamping
-  const getCurrentPage = (sheetName: string, totalPages: number) => {
-    const currentPage = currentSheetPages.get(sheetName) || 1;
-    return Math.max(1, Math.min(currentPage, totalPages || 1));
-  };
 
-  // Set page for a sheet  
-  const setSheetPage = (sheetName: string, page: number) => {
-    const newPages = new Map(currentSheetPages);
-    newPages.set(sheetName, page);
-    setCurrentSheetPages(newPages);
-  };
-
-  // Get total pages for a sheet
-  const getTotalPages = (sheetResults: CompareResult[]) => {
-    return Math.ceil(sheetResults.length / resultsPerPage) || 1;
-  };
-
-  // Get paginated results for a sheet with safe pagination
-  const getPaginatedSheetResults = (sheetName: string, sheetResults: CompareResult[]) => {
-    const totalPages = getTotalPages(sheetResults);
-    const currentPage = getCurrentPage(sheetName, totalPages);
-    const startIndex = (currentPage - 1) * resultsPerPage;
-    const endIndex = startIndex + resultsPerPage;
-    return sheetResults.slice(startIndex, endIndex);
-  };
-
-  // Reset pagination when results change
+  // Reset active tab when results change
   useEffect(() => {
-    setCurrentSheetPages(new Map());
+    setActiveTab('');
   }, [compareResults, searchQuery]);
 
   // Handle saving changes for a requirement
@@ -230,6 +204,14 @@ export function ComparePage() {
     return grouped;
   }, [filteredResults]);
 
+  // Set default active tab when results change
+  useEffect(() => {
+    if (compareResults.length > 0 && !activeTab) {
+      const firstSheetName = Array.from(groupedResults.keys())[0];
+      setActiveTab(firstSheetName || '');
+    }
+  }, [compareResults, activeTab, groupedResults]);
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
@@ -367,91 +349,62 @@ export function ComparePage() {
             </p>
           </div>
           <div className="px-6 pb-6 space-y-6">
-            {(() => {
-              const elements: JSX.Element[] = [];
-              
-              Array.from(groupedResults.entries()).forEach(([sheetName, sheetResults]) => {
-                const totalPages = getTotalPages(sheetResults);
-                const currentPage = getCurrentPage(sheetName, totalPages);
-                const paginatedResults = getPaginatedSheetResults(sheetName, sheetResults);
-                
-                // Sheet header with pagination info
-                elements.push(
-                  <div key={`sheet-header-${sheetName}`} className="space-y-4">
-                    {/* Sheet separator */}
-                    <div className="flex items-center gap-4 py-2">
-                      <div className="flex-1 h-px bg-border"></div>
-                      <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                        <div className="w-1 h-full bg-blue-500 rounded-full -ml-2"></div>
-                        <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                            Flik: {sheetName}
-                          </span>
-                          <span className="text-xs text-blue-700 dark:text-blue-300">
-                            {sheetResults.length} krav totalt
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex-1 h-px bg-border"></div>
-                    </div>
-                    
-                    {/* Pagination controls */}
-                    {totalPages > 1 && (
-                      <div className="flex items-center justify-between bg-muted/50 px-4 py-2 rounded-lg">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span>Sida {currentPage} av {totalPages}</span>
-                          <span>•</span>
-                          <span>Visar {paginatedResults.length} av {sheetResults.length} krav</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSheetPage(sheetName, currentPage - 1)}
-                            disabled={currentPage === 1}
-                            data-testid={`button-prev-page-${sheetName}`}
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSheetPage(sheetName, currentPage + 1)}
-                            disabled={currentPage === totalPages}
-                            data-testid={`button-next-page-${sheetName}`}
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    )}
+            {/* Tab Navigation */}
+            {groupedResults.size > 0 && (
+              <div className="flex flex-wrap gap-2 border-b pb-4">
+                {Array.from(groupedResults.entries()).map(([sheetName, sheetResults]) => (
+                  <Button
+                    key={sheetName}
+                    variant={activeTab === sheetName ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setActiveTab(sheetName)}
+                    className="flex items-center gap-2"
+                    data-testid={`tab-${sheetName}`}
+                  >
+                    <FileText className="h-4 w-4" />
+                    {sheetName}
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      {sheetResults.length}
+                    </Badge>
+                  </Button>
+                ))}
+              </div>
+            )}
+
+            {/* Active Tab Content */}
+            {activeTab && groupedResults.has(activeTab) && (
+              <div className="space-y-4">
+                {/* Sheet Header */}
+                <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                  <div className="w-1 h-8 bg-blue-500 rounded-full"></div>
+                  <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      Flik: {activeTab}
+                    </span>
+                    <span className="text-xs text-blue-700 dark:text-blue-300">
+                      {groupedResults.get(activeTab)?.length || 0} krav totalt
+                    </span>
                   </div>
-                );
-                
-                // Requirement cards for current page
-                const cardElements = paginatedResults.map(result => {
-                  const requirementKey = getRequirementKey(result);
-                  return (
-                    <CompareResultCard 
-                      key={requirementKey}
-                      result={result} 
-                      getStatusIcon={getStatusIcon}
-                      onSaveChanges={handleSaveChanges}
-                      requirementKey={requirementKey}
-                    />
-                  );
-                });
-                
-                elements.push(
-                  <div key={`sheet-cards-${sheetName}`} className="space-y-3">
-                    {cardElements}
-                  </div>
-                );
-              });
-              
-              return elements;
-            })()}
+                </div>
+
+                {/* All Requirements for Active Tab */}
+                <div className="space-y-3">
+                  {groupedResults.get(activeTab)?.map(result => {
+                    const requirementKey = getRequirementKey(result);
+                    return (
+                      <CompareResultCard 
+                        key={requirementKey}
+                        result={result} 
+                        getStatusIcon={getStatusIcon}
+                        onSaveChanges={handleSaveChanges}
+                        requirementKey={requirementKey}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -604,6 +557,67 @@ function CompareResultCard({ result, getStatusIcon, onSaveChanges, requirementKe
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* AI-Grouped Similar Requirements */}
+          {!result.isIdentical && result.aiGroupedRequirements && result.aiGroupedRequirements.length > 0 && (
+            <div className="border-t border-yellow-200 dark:border-yellow-700 pt-2 bg-yellow-50/50 dark:bg-yellow-950/30 rounded-lg p-2">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                  <span className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                    AI-grupperade liknande krav
+                  </span>
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  {result.aiGroupedRequirements.length} förslag
+                </Badge>
+              </div>
+              
+              <div className="space-y-1">
+                {result.aiGroupedRequirements.slice(0, 3).map((req, i) => (
+                  <div key={i} className="bg-yellow-100/50 dark:bg-yellow-900/20 rounded-md p-2 border border-yellow-200 dark:border-yellow-700">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs mb-1 text-yellow-900 dark:text-yellow-100 line-clamp-2">{req.text}</p>
+                        <div className="flex items-center gap-1 text-xs text-yellow-700 dark:text-yellow-300 flex-wrap">
+                          <span className="truncate">{req.organizations?.slice(0, 1).join(', ')}{req.organizations && req.organizations.length > 1 ? '...' : ''}</span>
+                          <span>•</span>
+                          <span>{new Date(req.import_date || '').toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' })}</span>
+                          {req.similarity_score && (
+                            <>
+                              <span>•</span>
+                              <span>AI: {req.similarity_score}%</span>
+                            </>
+                          )}
+                        </div>
+                        {req.user_comment && (
+                          <div className="mt-1 p-1 bg-yellow-200/50 dark:bg-yellow-800/30 rounded text-xs">
+                            <span className="text-yellow-800 dark:text-yellow-200">{req.user_comment}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {getStatusIcon(req.user_status || 'OK')}
+                        <span className="text-xs font-medium text-yellow-800 dark:text-yellow-200">{req.user_status || 'OK'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {result.aiGroupedRequirements.length > 3 && (
+                  <div className="text-center pt-1">
+                    <span className="text-xs text-yellow-700 dark:text-yellow-300">
+                      +{result.aiGroupedRequirements.length - 3} fler liknande krav
+                    </span>
+                  </div>
+                )}
+              </div>
+              
+              <div className="mt-2 text-xs text-yellow-700 dark:text-yellow-300">
+                💡 Dessa krav har identifierats som liknande av AI inom samma kategori
+              </div>
             </div>
           )}
 

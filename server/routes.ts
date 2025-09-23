@@ -911,32 +911,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`✅ Extracted ${newRequirements.length} requirements from uploaded file`);
 
-      // Compare each new requirement against existing ones
+      // Compare each new requirement against existing ones with AI grouping
       const compareResults: Array<{
         newRequirement: typeof newRequirements[0];
         matchedRequirements: typeof existingRequirements;
         isIdentical: boolean;
         similarityScore?: number;
+        aiGroupedRequirements?: typeof existingRequirements;
       }> = [];
 
       for (const newReq of newRequirements) {
+        // Primary: exact text match (case-insensitive, trimmed)
         const matches = existingRequirements.filter(existingReq => {
-          // Primary: exact text match (case-insensitive, trimmed)
           const newText = newReq.text.toLowerCase().trim();
           const existingText = existingReq.text.toLowerCase().trim();
           return newText === existingText;
         });
 
+        const isIdentical = matches.length > 0;
+        let aiGroupedRequirements: typeof existingRequirements = [];
+
+        // If no identical match, look for AI-grouped similar requirements
+        if (!isIdentical) {
+          const newReqCategory = newReq.categories[0] || 'Okategoriserad';
+          
+          // Find requirements in the same category that are part of AI groups
+          const candidateRequirements = existingRequirements.filter(existingReq => {
+            // Must be in same category
+            const existingCategory = existingReq.requirement_category || 'Okategoriserad';
+            if (existingCategory !== newReqCategory) return false;
+            
+            // Must have AI grouping information
+            return existingReq.group_id && existingReq.similarity_score && existingReq.similarity_score >= 80;
+          });
+
+          // Group candidates by their group_id and find groups with multiple members
+          const groupMap = new Map<string, typeof existingRequirements>();
+          candidateRequirements.forEach(req => {
+            const groupId = req.group_id!;
+            if (!groupMap.has(groupId)) {
+              groupMap.set(groupId, []);
+            }
+            groupMap.get(groupId)!.push(req);
+          });
+
+          // Find groups with at least 2 members (meaningful AI groups)
+          const meaningfulGroups = Array.from(groupMap.entries()).filter(([_, members]) => members.length >= 2);
+          
+          if (meaningfulGroups.length > 0) {
+            // For each meaningful group, check if any member is similar to newReq
+            for (const [groupId, members] of meaningfulGroups) {
+              const hasTextualSimilarity = members.some(member => {
+                const newText = newReq.text.toLowerCase();
+                const memberText = member.text.toLowerCase();
+                
+                // Simple similarity check: shared keywords and similar length
+                const newWords = new Set(newText.split(/\s+/).filter(w => w.length > 3));
+                const memberWords = new Set(memberText.split(/\s+/).filter(w => w.length > 3));
+                const intersection = new Set(Array.from(newWords).filter(w => memberWords.has(w)));
+                const similarity = intersection.size / Math.max(newWords.size, memberWords.size);
+                
+                return similarity > 0.3; // 30% word overlap threshold
+              });
+
+              if (hasTextualSimilarity) {
+                aiGroupedRequirements.push(...members);
+              }
+            }
+          }
+        }
+
         compareResults.push({
           newRequirement: newReq,
           matchedRequirements: matches,
-          isIdentical: matches.length > 0,
-          similarityScore: matches.length > 0 ? 1.0 : 0.0
+          isIdentical,
+          similarityScore: isIdentical ? 1.0 : (aiGroupedRequirements.length > 0 ? 0.7 : 0.0),
+          aiGroupedRequirements: aiGroupedRequirements.length > 0 ? aiGroupedRequirements : undefined
         });
       }
 
       console.log(`🔍 Comparison complete: ${compareResults.length} results generated`);
       console.log(`📊 Identical matches found: ${compareResults.filter(r => r.isIdentical).length}`);
+      console.log(`🤖 AI-grouped similar requirements found: ${compareResults.filter(r => r.aiGroupedRequirements && r.aiGroupedRequirements.length > 0).length}`);
 
       res.json(compareResults);
 

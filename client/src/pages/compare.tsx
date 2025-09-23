@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, GitCompare, Search, FileText, MessageSquare, CheckCircle, AlertCircle, Clock, Save } from 'lucide-react';
+import { Upload, GitCompare, Search, FileText, MessageSquare, CheckCircle, AlertCircle, Clock, Save, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import type { Requirement } from '@shared/schema';
@@ -34,6 +34,8 @@ export function ComparePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [requirementChanges, setRequirementChanges] = useState<Map<string, { comment: string; status: string }>>(new Map());
   const [isSavingToDatabase, setIsSavingToDatabase] = useState(false);
+  const [currentSheetPages, setCurrentSheetPages] = useState<Map<string, number>>(new Map());
+  const [resultsPerPage] = useState(10); // Configurable per-page count
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -48,6 +50,39 @@ export function ComparePage() {
       result.newRequirement.text
     );
   };
+
+
+  // Get safe current page for a sheet with clamping
+  const getCurrentPage = (sheetName: string, totalPages: number) => {
+    const currentPage = currentSheetPages.get(sheetName) || 1;
+    return Math.max(1, Math.min(currentPage, totalPages || 1));
+  };
+
+  // Set page for a sheet  
+  const setSheetPage = (sheetName: string, page: number) => {
+    const newPages = new Map(currentSheetPages);
+    newPages.set(sheetName, page);
+    setCurrentSheetPages(newPages);
+  };
+
+  // Get total pages for a sheet
+  const getTotalPages = (sheetResults: CompareResult[]) => {
+    return Math.ceil(sheetResults.length / resultsPerPage) || 1;
+  };
+
+  // Get paginated results for a sheet with safe pagination
+  const getPaginatedSheetResults = (sheetName: string, sheetResults: CompareResult[]) => {
+    const totalPages = getTotalPages(sheetResults);
+    const currentPage = getCurrentPage(sheetName, totalPages);
+    const startIndex = (currentPage - 1) * resultsPerPage;
+    const endIndex = startIndex + resultsPerPage;
+    return sheetResults.slice(startIndex, endIndex);
+  };
+
+  // Reset pagination when results change
+  useEffect(() => {
+    setCurrentSheetPages(new Map());
+  }, [compareResults, searchQuery]);
 
   // Handle saving changes for a requirement
   const handleSaveChanges = async (requirementKey: string, comment: string, status: string) => {
@@ -173,6 +208,27 @@ export function ComparePage() {
     searchQuery === '' || 
     result.newRequirement.text.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Memoized group results by sheet for pagination  
+  const groupedResults = useMemo(() => {
+    const sortedResults = [...filteredResults].sort((a, b) => {
+      if (a.newRequirement.sheetOrder !== b.newRequirement.sheetOrder) {
+        return a.newRequirement.sheetOrder - b.newRequirement.sheetOrder;
+      }
+      return a.newRequirement.sheetRowIndex - b.newRequirement.sheetRowIndex;
+    });
+
+    const grouped = new Map<string, CompareResult[]>();
+    sortedResults.forEach(result => {
+      const sheetName = result.newRequirement.categories[0] || 'unknown';
+      if (!grouped.has(sheetName)) {
+        grouped.set(sheetName, []);
+      }
+      grouped.get(sheetName)!.push(result);
+    });
+    
+    return grouped;
+  }, [filteredResults]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -310,49 +366,86 @@ export function ComparePage() {
               )}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
             {(() => {
-              const sortedResults = filteredResults.sort((a, b) => {
-                // Sort by sheet order first, then by row index within sheet - preserve exact Excel order
-                if (a.newRequirement.sheetOrder !== b.newRequirement.sheetOrder) {
-                  return a.newRequirement.sheetOrder - b.newRequirement.sheetOrder;
-                }
-                return a.newRequirement.sheetRowIndex - b.newRequirement.sheetRowIndex;
-              });
-              
-              let currentSheet = '';
               const elements: JSX.Element[] = [];
               
-              sortedResults.forEach((result, index) => {
-                const sheetName = result.newRequirement.categories[0]; // First category is sheet name
+              Array.from(groupedResults.entries()).forEach(([sheetName, sheetResults]) => {
+                const totalPages = getTotalPages(sheetResults);
+                const currentPage = getCurrentPage(sheetName, totalPages);
+                const paginatedResults = getPaginatedSheetResults(sheetName, sheetResults);
                 
-                // Add sheet separator when sheet changes
-                if (sheetName !== currentSheet) {
-                  currentSheet = sheetName;
-                  elements.push(
-                    <div key={`sheet-${sheetName}-${index}`} className="flex items-center gap-4 py-3">
+                // Sheet header with pagination info
+                elements.push(
+                  <div key={`sheet-header-${sheetName}`} className="space-y-4">
+                    {/* Sheet separator */}
+                    <div className="flex items-center gap-4 py-2">
                       <div className="flex-1 h-px bg-border"></div>
-                      <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-md border-l-4 border-blue-500">
-                        <FileText className="h-4 w-4 text-blue-600" />
-                        <span className="text-sm font-medium text-blue-900">
-                          Flik: {sheetName}
-                        </span>
+                      <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 dark:bg-blue-950 rounded-lg border-l-4 border-blue-500">
+                        <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                            Flik: {sheetName}
+                          </span>
+                          <span className="text-xs text-blue-700 dark:text-blue-300">
+                            {sheetResults.length} krav totalt
+                          </span>
+                        </div>
                       </div>
                       <div className="flex-1 h-px bg-border"></div>
                     </div>
-                  );
-                }
+                    
+                    {/* Pagination controls */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between bg-muted/50 px-4 py-2 rounded-lg">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <span>Sida {currentPage} av {totalPages}</span>
+                          <span>•</span>
+                          <span>Visar {paginatedResults.length} av {sheetResults.length} krav</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSheetPage(sheetName, currentPage - 1)}
+                            disabled={currentPage === 1}
+                            data-testid={`button-prev-page-${sheetName}`}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSheetPage(sheetName, currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            data-testid={`button-next-page-${sheetName}`}
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
                 
-                // Add the requirement card  
-                const requirementKey = getRequirementKey(result);
+                // Requirement cards for current page
+                const cardElements = paginatedResults.map(result => {
+                  const requirementKey = getRequirementKey(result);
+                  return (
+                    <CompareResultCard 
+                      key={requirementKey}
+                      result={result} 
+                      getStatusIcon={getStatusIcon}
+                      onSaveChanges={handleSaveChanges}
+                      requirementKey={requirementKey}
+                    />
+                  );
+                });
+                
                 elements.push(
-                  <CompareResultCard 
-                    key={requirementKey}
-                    result={result} 
-                    getStatusIcon={getStatusIcon}
-                    onSaveChanges={handleSaveChanges}
-                    requirementKey={requirementKey}
-                  />
+                  <div key={`sheet-cards-${sheetName}`} className="space-y-3">
+                    {cardElements}
+                  </div>
                 );
               });
               

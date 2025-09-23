@@ -106,31 +106,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Parse Excel file
+      // Parse Excel file - Skip first sheet (instructions), process remaining sheets
       const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      if (!sheetName) {
-        return res.status(400).json({ error: "Excel-filen innehåller inga kalkylblad" });
+      
+      console.log('Total sheets:', workbook.SheetNames.length);
+      console.log('All sheet names:', workbook.SheetNames);
+      
+      // Skip first sheet (always contains instructions), process remaining sheets
+      const sheetsToProcess = workbook.SheetNames.slice(1);
+      console.log('Processing sheets:', sheetsToProcess);
+      
+      if (sheetsToProcess.length === 0) {
+        return res.status(400).json({ error: "Excel-filen måste innehålla minst en flik med krav (utöver första fliken med instruktioner)" });
       }
 
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      let allJsonData: any[][] = [];
+      let combinedHeaders: string[] = [];
 
-      if (jsonData.length < 2) {
-        return res.status(400).json({ error: "Excel-filen måste innehålla minst en rubrikrad och en datarad" });
+      // Process each sheet (except the first one)
+      for (const sheetName of sheetsToProcess) {
+        console.log(`\n=== Processing sheet: ${sheetName} ===`);
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (jsonData.length < 2) {
+          console.log(`Skipping sheet ${sheetName} - too few rows`);
+          continue;
+        }
+
+        allJsonData = allJsonData.concat(jsonData);
       }
 
-      // Find headers and data intelligently - many Excel files have instructions before the actual table
+      if (allJsonData.length < 2) {
+        return res.status(400).json({ error: "Inga giltiga kalkylblad med krav hittades" });
+      }
+
+      // Find headers and data intelligently across all sheets
       let headerRowIndex = -1;
       let headers: string[] = [];
       let dataRows: any[][] = [];
 
-      console.log('Searching for headers in', jsonData.length, 'rows');
-      console.log('First 10 rows:', jsonData.slice(0, 10));
+      console.log('Searching for headers in', allJsonData.length, 'total rows from all sheets');
+      console.log('First 10 rows:', allJsonData.slice(0, 10));
 
       // Look for a row that looks like headers (contains known Swedish column terms)
-      for (let i = 0; i < Math.min(jsonData.length, 20); i++) {
-        const row = jsonData[i] as any[];
+      for (let i = 0; i < Math.min(allJsonData.length, 50); i++) {
+        const row = allJsonData[i] as any[];
         if (!row || row.length < 2) continue;
 
         const rowAsString = row.join(' ').toLowerCase();
@@ -153,7 +174,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (hasHeaderTerms) {
           headerRowIndex = i;
           headers = row.map(cell => cell?.toString() || '');
-          dataRows = jsonData.slice(i + 1) as any[][];
+          dataRows = allJsonData.slice(i + 1) as any[][];
           console.log('Found headers at row', i, ':', headers);
           break;
         }
@@ -161,12 +182,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Fallback: if no clear headers found, use first non-empty row as headers
       if (headerRowIndex === -1) {
-        for (let i = 0; i < Math.min(jsonData.length, 10); i++) {
-          const row = jsonData[i] as any[];
+        for (let i = 0; i < Math.min(allJsonData.length, 20); i++) {
+          const row = allJsonData[i] as any[];
           if (row && row.length > 1 && row.some(cell => cell && cell.toString().trim())) {
             headerRowIndex = i;
             headers = row.map(cell => cell?.toString() || '');
-            dataRows = jsonData.slice(i + 1) as any[][];
+            dataRows = allJsonData.slice(i + 1) as any[][];
             console.log('Fallback: using row', i, 'as headers:', headers);
             break;
           }
@@ -256,7 +277,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        if (requirementText) {
+        // OBLIGATORISKT KRAV: En rad måste innehålla "ska" eller "bör" för att räknas som giltigt krav
+        let hasRequiredKeyword = false;
+        const fullRowText = row.join(' ').toLowerCase();
+        
+        if (fullRowText.includes('ska') || 
+            fullRowText.includes('skall') || 
+            fullRowText.includes('bör') || 
+            fullRowText.includes('shall') || 
+            fullRowText.includes('should') ||
+            fullRowText.includes('must')) {
+          hasRequiredKeyword = true;
+        }
+
+        if (requirementText && hasRequiredKeyword) {
+          console.log('✅ Valid requirement found:', requirementText.substring(0, 100) + '...');
           const requirement: InsertRequirement = {
             id: randomUUID(),
             text: requirementText,
@@ -283,6 +318,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
 
           requirements.push(requirement);
+        } else if (requirementText && !hasRequiredKeyword) {
+          console.log('❌ Row rejected - missing "ska"/"bör":', requirementText.substring(0, 100) + '...');
+        } else if (!requirementText) {
+          console.log('❌ Row rejected - no requirement text found');
         }
       }
 

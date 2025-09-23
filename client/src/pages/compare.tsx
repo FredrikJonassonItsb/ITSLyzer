@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -315,20 +315,20 @@ export function ComparePage() {
 
       {/* Comparison Results */}
       {compareResults.length > 0 && (
-        <Card>
-          <CardHeader>
+        <div className="bg-card border rounded-lg shadow-sm">
+          <div className="p-6 pb-4">
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
                 <GitCompare className="h-5 w-5" />
                 Jämförelseresultat ({compareResults.length} krav)
-              </CardTitle>
+              </h2>
               <div className="flex items-center gap-4">
                 {/* Save to Database Button */}
                 <Button
                   onClick={handleSaveToDatabase}
                   disabled={isSavingToDatabase || !uploadedFile || !organization}
                   variant="default"
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-green-600 dark:bg-green-700"
                   data-testid="button-save-to-database"
                 >
                   {isSavingToDatabase ? (
@@ -357,16 +357,16 @@ export function ComparePage() {
                 </div>
               </div>
             </div>
-            <CardDescription>
+            <p className="text-sm text-muted-foreground mt-2">
               Krav visas i exakt samma ordning som i den uppladdade Excel-filen.
               {requirementChanges.size > 0 && (
                 <span className="text-blue-600 font-medium">
                   {' '}Du har gjort {requirementChanges.size} ändringar som kan sparas till databasen.
                 </span>
               )}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
+            </p>
+          </div>
+          <div className="px-6 pb-6 space-y-6">
             {(() => {
               const elements: JSX.Element[] = [];
               
@@ -381,7 +381,8 @@ export function ComparePage() {
                     {/* Sheet separator */}
                     <div className="flex items-center gap-4 py-2">
                       <div className="flex-1 h-px bg-border"></div>
-                      <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 dark:bg-blue-950 rounded-lg border-l-4 border-blue-500">
+                      <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                        <div className="w-1 h-full bg-blue-500 rounded-full -ml-2"></div>
                         <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                         <div className="flex flex-col">
                           <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
@@ -451,8 +452,8 @@ export function ComparePage() {
               
               return elements;
             })()}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Help Text */}
@@ -529,68 +530,74 @@ function CompareResultCard({ result, getStatusIcon, onSaveChanges, requirementKe
   ];
 
   return (
-    <Card className={`${result.isIdentical ? 'border-green-200 bg-green-50' : 'border-yellow-200 bg-yellow-50'}`}>
-      <CardContent className="p-4">
-        <div className="space-y-3">
-          {/* New Requirement */}
+    <Card className={`${result.isIdentical ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950' : 'border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950'} hover-elevate transition-all duration-200`}>
+      <CardContent className="p-3">
+        <div className="space-y-2">
+          {/* Header with badges and requirement text */}
           <div className="space-y-2">
-            <div className="flex items-start gap-3">
-              <Badge variant={result.isIdentical ? 'default' : 'outline'}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant={result.isIdentical ? 'default' : 'outline'} className="text-xs">
                 {result.isIdentical ? 'Identiskt' : 'Liknande'}
               </Badge>
-              <Badge variant="secondary">
+              <Badge variant="secondary" className="text-xs">
                 {result.newRequirement.requirement_type}
               </Badge>
-              {result.newRequirement.categories.map((category, i) => (
+              {result.matchedRequirements.length > 0 && (
+                <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                  {result.matchedRequirements.length} träff{result.matchedRequirements.length > 1 ? 'ar' : ''}
+                </Badge>
+              )}
+              <div className="flex-1"></div>
+              {result.newRequirement.categories.slice(0, 1).map((category, i) => (
                 <Badge key={i} variant="outline" className="text-xs">
                   {category}
                 </Badge>
               ))}
             </div>
             
-            <p className="text-sm leading-relaxed font-medium">
+            <p className="text-sm leading-snug font-medium text-gray-900 dark:text-gray-100">
               {result.newRequirement.text}
             </p>
           </div>
 
           {/* Matched Requirements Summary */}
           {result.matchedRequirements.length > 0 && (
-            <div className="border-t pt-3 mt-3">
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-2">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setExpanded(!expanded)}
-                className="h-auto p-0 font-normal justify-start"
+                className="font-medium text-blue-700 dark:text-blue-300"
                 data-testid={`button-expand-matches-${result.newRequirement.originalIndex}`}
               >
-                <MessageSquare className="h-4 w-4 mr-2" />
-                Hittades {result.matchedRequirements.length} gång(er) tidigare
-                {expanded ? ' (göm)' : ' (visa)'}
+                <MessageSquare className="h-3 w-3 mr-1" />
+                {result.matchedRequirements.length} tidigare träff{result.matchedRequirements.length > 1 ? 'ar' : ''}
+                {expanded ? ' ↑' : ' ↓'}
               </Button>
 
               {expanded && (
-                <div className="mt-3 space-y-2">
+                <div className="mt-2 space-y-1">
                   {result.matchedRequirements.map((req, i) => (
-                    <div key={i} className="bg-white rounded-lg p-3 text-sm">
+                    <div key={i} className="bg-white dark:bg-gray-800 rounded-md p-2 border border-gray-100 dark:border-gray-700">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <p className="text-sm mb-2">{req.text}</p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{req.organizations?.join(', ')}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs mb-1 text-gray-800 dark:text-gray-200 line-clamp-2">{req.text}</p>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground flex-wrap">
+                            <span className="truncate">{req.organizations?.slice(0, 1).join(', ')}{req.organizations && req.organizations.length > 1 ? '...' : ''}</span>
                             <span>•</span>
-                            <span>{new Date(req.import_date || '').toLocaleDateString('sv-SE')}</span>
+                            <span>{new Date(req.import_date || '').toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' })}</span>
                             <span>•</span>
-                            <span>{req.occurrences} förekomster</span>
+                            <span>{req.occurrences}x</span>
                           </div>
                           {req.user_comment && (
-                            <div className="mt-2 p-2 bg-blue-50 rounded text-xs">
-                              <strong>Kommentar:</strong> {req.user_comment}
+                            <div className="mt-1 p-1 bg-blue-50 dark:bg-blue-950 rounded text-xs">
+                              <span className="text-blue-800 dark:text-blue-200">{req.user_comment}</span>
                             </div>
                           )}
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 shrink-0">
                           {getStatusIcon(req.user_status || 'OK')}
-                          <span className="text-xs">{req.user_status || 'OK'}</span>
+                          <span className="text-xs font-medium">{req.user_status || 'OK'}</span>
                         </div>
                       </div>
                     </div>
@@ -601,65 +608,65 @@ function CompareResultCard({ result, getStatusIcon, onSaveChanges, requirementKe
           )}
 
           {/* Editable Comment and Status Section */}
-          <div className="border-t pt-4 mt-4 space-y-3">
-            <h4 className="text-sm font-medium text-gray-900">Lägg till kommentar och sätt status</h4>
-            
-            <div className="space-y-3">
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-3 space-y-2">
+            <div className="grid grid-cols-1 gap-2">
               {/* Comment Input */}
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-700">Kommentar</label>
+              <div>
+                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">Kommentar</label>
                 <Textarea
-                  placeholder="Ange din kommentar för detta krav..."
+                  placeholder="Ange kommentar..."
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
-                  className="min-h-[60px] text-sm"
+                  rows={3}
+                  className="text-sm resize-none"
                   data-testid={`textarea-comment-${result.newRequirement.originalIndex}`}
                 />
               </div>
 
-              {/* Status Select */}
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-700">Status</label>
-                <Select 
-                  value={newStatus} 
-                  onValueChange={setNewStatus}
-                >
-                  <SelectTrigger 
-                    className="text-sm"
-                    data-testid={`select-status-${result.newRequirement.originalIndex}`}
+              {/* Status and Save in one row */}
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">Status</label>
+                  <Select 
+                    value={newStatus} 
+                    onValueChange={setNewStatus}
                   >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {statusOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                    <SelectTrigger 
+                      className="text-sm"
+                      data-testid={`select-status-${result.newRequirement.originalIndex}`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              {/* Save Button */}
-              <Button
-                onClick={handleSave}
-                disabled={isSaving}
-                size="sm"
-                className="w-full"
-                data-testid={`button-save-changes-${result.newRequirement.originalIndex}`}
-              >
-                {isSaving ? (
-                  <>
-                    <Clock className="h-4 w-4 mr-2 animate-spin" />
-                    Sparar...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Spara ändringar
-                  </>
-                )}
-              </Button>
+                {/* Compact Save Button */}
+                <Button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  size="sm"
+                  data-testid={`button-save-changes-${result.newRequirement.originalIndex}`}
+                >
+                  {isSaving ? (
+                    <>
+                      <Clock className="h-3 w-3 mr-1 animate-spin" />
+                      Sparar
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-3 w-3 mr-1" />
+                      Spara
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

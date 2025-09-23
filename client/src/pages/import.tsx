@@ -70,7 +70,7 @@ export function ImportPage() {
       }, 500);
 
       // Upload file
-      const response = await fetch('/api/import', {
+      const response = await fetch('/api/import/excel', {
         method: 'POST',
         body: formData
       });

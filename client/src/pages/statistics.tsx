@@ -3,23 +3,112 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { BarChart3, PieChart, TrendingUp, Download, Building, FileText, Users, Calendar } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import type { Statistics, Requirement } from '@shared/schema';
 
 export function StatisticsPage() {
   // Fetch statistics
-  const { data: statistics, isLoading } = useQuery({
+  const { data: statistics, isLoading } = useQuery<Statistics>({
     queryKey: ['/api/statistics'],
     enabled: true
   });
 
   // Fetch requirements for additional analysis
-  const { data: requirements = [] } = useQuery({
+  const { data: requirements = [] } = useQuery<Requirement[]>({
     queryKey: ['/api/requirements'],
     enabled: true
   });
 
   const handleExport = () => {
-    console.log('Exporting statistics...');
-    // TODO: Implement export functionality
+    if (!statistics || !requirements) return;
+
+    // Helper function to escape CSV values to prevent injection
+    const escapeCSV = (value: string | number): string => {
+      const str = String(value);
+      // Escape values that start with dangerous characters to prevent formula injection
+      if (str.match(/^[=+\-@]/)) {
+        return `"'${str.replace(/"/g, '""')}"`;
+      }
+      // Quote values containing commas, quotes, or newlines
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    // Calculate correct metrics using grouped requirements
+    const groupedCount = requirements.filter(req => req.group_id).length;
+    const groupingEffectiveness = statistics.totalRequirements > 0 
+      ? Math.round((groupedCount / statistics.totalRequirements) * 100) 
+      : 0;
+    const averageGroupSize = statistics.groups > 0 
+      ? Math.round(groupedCount / statistics.groups) 
+      : 0;
+
+    // Create comprehensive statistics report
+    const reportData = {
+      generatedAt: new Date().toISOString(),
+      summary: {
+        totalRequirements: statistics.totalRequirements,
+        mustRequirements: statistics.mustRequirements,
+        shouldRequirements: statistics.shouldRequirements,
+        organizations: statistics.organizations,
+        groups: statistics.groups,
+        newRequirements: statistics.newRequirements
+      },
+      categories: statistics.categories,
+      organizationStats: statistics.organizationStats,
+      statusStats: statistics.statusStats,
+      analysisMetrics: {
+        groupingEffectiveness,
+        averageGroupSize,
+        criticalRequirementsPercent: statistics.totalRequirements > 0 ? Math.round((statistics.mustRequirements / statistics.totalRequirements) * 100) : 0,
+        newRequirementsPercent: statistics.totalRequirements > 0 ? Math.round((statistics.newRequirements / statistics.totalRequirements) * 100) : 0
+      }
+    };
+
+    // Generate CSV content with proper escaping
+    const csvContent = [
+      'Svenskt Kravanalysverktyg - Statistikrapport',
+      `Genererad: ${new Date().toLocaleString('sv-SE')}`,
+      '',
+      'SAMMANFATTNING',
+      `Totalt antal krav,${statistics.totalRequirements}`,
+      `Skall-krav,${statistics.mustRequirements}`,
+      `Bör-krav,${statistics.shouldRequirements}`,
+      `Organisationer,${statistics.organizations}`,
+      `AI-grupper,${statistics.groups}`,
+      `Nya krav,${statistics.newRequirements}`,
+      '',
+      'KATEGORIER',
+      'Kategori,Antal',
+      ...statistics.categories.map(cat => `${escapeCSV(cat.name)},${cat.count}`),
+      '',
+      'ORGANISATIONER',
+      'Organisation,Antal',
+      ...statistics.organizationStats.map(org => `${escapeCSV(org.name)},${org.count}`),
+      '',
+      'STATUS',
+      'Status,Antal',
+      ...statistics.statusStats.map(status => `${escapeCSV(status.status)},${status.count}`),
+      '',
+      'ANALYSMÅTT',
+      `Grupperingseffektivitet,${reportData.analysisMetrics.groupingEffectiveness}%`,
+      `Genomsnittlig gruppstorlek,${reportData.analysisMetrics.averageGroupSize}`,
+      `Kritiska krav (Skall),${reportData.analysisMetrics.criticalRequirementsPercent}%`,
+      `Nya krav,${reportData.analysisMetrics.newRequirementsPercent}%`
+    ].join('\n');
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `kravanalys-rapport-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   if (isLoading) {
@@ -265,6 +354,129 @@ export function StatisticsPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Interactive Charts Section */}
+      {stats.totalRequirements > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Category Distribution Chart */}
+          {stats.categories.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Kravkategorier
+                </CardTitle>
+                <CardDescription>
+                  Interaktiv fördelning av kravkategorier
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={stats.categories.slice(0, 10)}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="name" 
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                        fontSize={12}
+                      />
+                      <YAxis />
+                      <Tooltip 
+                        formatter={(value) => [value, 'Antal krav']}
+                        labelFormatter={(label) => `Kategori: ${label}`}
+                      />
+                      <Bar dataKey="count" fill="hsl(var(--primary))" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Requirements Type Pie Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PieChart className="h-5 w-5" />
+                Kravtypsfördelning
+              </CardTitle>
+              <CardDescription>
+                Visuell fördelning mellan Skall- och Bör-krav
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPieChart>
+                    <Pie
+                      data={[
+                        { name: 'Skall-krav', value: stats.mustRequirements, color: '#ef4444' },
+                        { name: 'Bör-krav', value: stats.shouldRequirements, color: '#eab308' }
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={80}
+                      dataKey="value"
+                      label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(1)}%)`}
+                    >
+                      <Cell fill="#ef4444" />
+                      <Cell fill="#eab308" />
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value) => [value, 'Antal krav']}
+                    />
+                  </RechartsPieChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Organization Distribution Chart */}
+          {stats.organizationStats.length > 0 && (
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building className="h-5 w-5" />
+                  Organisationsfördelning
+                </CardTitle>
+                <CardDescription>
+                  Antal krav per organisation
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={stats.organizationStats.slice(0, 10)}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="name" 
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                        fontSize={12}
+                      />
+                      <YAxis />
+                      <Tooltip 
+                        formatter={(value) => [value, 'Antal krav']}
+                        labelFormatter={(label) => `Organisation: ${label}`}
+                      />
+                      <Bar dataKey="count" fill="hsl(var(--secondary))" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Summary Cards */}

@@ -52,7 +52,7 @@ export const filterSchema = z.object({
   organizations: z.array(z.string()).optional(),
   categories: z.array(z.string()).optional(),
   dates: z.array(z.string()).optional(),
-  userStatus: z.array(z.enum(["OK", "Under utveckling", "Senare", "all"])).optional(),
+  userStatus: z.array(z.enum(["OK", "Under utveckling", "Senare", "Granskas", "Godkänd", "Avvisad", "Behöver förtydligande", "all"])).optional(),
   showOnlyNew: z.boolean().optional(),
   showGrouped: z.boolean().optional(),
 });

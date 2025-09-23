@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Upload, GitCompare, Search, FileText, MessageSquare, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Upload, GitCompare, Search, FileText, MessageSquare, CheckCircle, AlertCircle, Clock, Save } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
 import type { Requirement } from '@shared/schema';
 
 interface CompareResult {
@@ -14,6 +17,8 @@ interface CompareResult {
     requirement_type: string;
     categories: string[];
     originalIndex: number;
+    sheetOrder: number;
+    sheetRowIndex: number;
   };
   matchedRequirements: Requirement[];
   isIdentical: boolean;
@@ -26,8 +31,79 @@ export function ComparePage() {
   const [isUploading, setIsUploading] = useState(false);
   const [compareResults, setCompareResults] = useState<CompareResult[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [requirementChanges, setRequirementChanges] = useState<Map<string, { comment: string; status: string }>>(new Map());
+  const [isSavingToDatabase, setIsSavingToDatabase] = useState(false);
 
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Generate stable key for requirement tracking across sheets
+  const generateRequirementKey = (result: CompareResult) => {
+    const sheet = result.newRequirement.categories[0] || 'unknown';
+    const textHash = result.newRequirement.text.slice(0, 50).replace(/\s+/g, '_');
+    return `${sheet}:${result.newRequirement.sheetOrder}:${result.newRequirement.sheetRowIndex}:${textHash}`;
+  };
+
+  // Handle saving changes for a requirement
+  const handleSaveChanges = async (requirementKey: string, comment: string, status: string) => {
+    const newChanges = new Map(requirementChanges);
+    newChanges.set(requirementKey, { comment, status });
+    setRequirementChanges(newChanges);
+    console.log('Changes stored for requirement:', { requirementKey, comment, status });
+  };
+
+  // Save the entire comparison file to database with all changes
+  const handleSaveToDatabase = async () => {
+    if (!uploadedFile || !organization) return;
+
+    setIsSavingToDatabase(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadedFile);
+      formData.append('organization', organization);
+      
+      // Include all the changes made during comparison
+      const changesArray = Array.from(requirementChanges.entries()).map(([requirementKey, changes]) => ({
+        requirementKey,
+        ...changes
+      }));
+      formData.append('changes', JSON.stringify(changesArray));
+
+      const response = await fetch('/api/import/excel', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save to database');
+      }
+
+      const result = await response.json();
+      console.log('File saved to database:', result);
+      
+      // Refresh requirements data
+      await queryClient.invalidateQueries({ queryKey: ['/api/requirements'] });
+      
+      // Clear changes after successful save
+      setRequirementChanges(new Map());
+      
+      // Show success message
+      toast({
+        title: "Framgång!",
+        description: "Kravfilen har sparats till databasen med dina ändringar.",
+      });
+      
+    } catch (error) {
+      console.error('Error saving to database:', error);
+      toast({
+        title: "Fel",
+        description: "Fel vid sparning till databas. Försök igen.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingToDatabase(false);
+    }
+  };
 
   // Fetch all existing requirements for comparison
   const { data: existingRequirements = [], isLoading } = useQuery<Requirement[]>({
@@ -185,38 +261,98 @@ export function ComparePage() {
                 <GitCompare className="h-5 w-5" />
                 Jämförelseresultat ({compareResults.length} krav)
               </CardTitle>
-              <div className="flex items-center gap-2">
-                <Search className="h-4 w-4" />
-                <Input
-                  placeholder="Sök i krav..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-64"
-                  data-testid="input-search-results"
-                />
+              <div className="flex items-center gap-4">
+                {/* Save to Database Button */}
+                <Button
+                  onClick={handleSaveToDatabase}
+                  disabled={isSavingToDatabase || !uploadedFile || !organization}
+                  variant="default"
+                  className="bg-green-600 hover:bg-green-700"
+                  data-testid="button-save-to-database"
+                >
+                  {isSavingToDatabase ? (
+                    <>
+                      <Clock className="h-4 w-4 mr-2 animate-spin" />
+                      Sparar till databas...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Spara till databas ({requirementChanges.size} ändringar)
+                    </>
+                  )}
+                </Button>
+                
+                {/* Search */}
+                <div className="flex items-center gap-2">
+                  <Search className="h-4 w-4" />
+                  <Input
+                    placeholder="Sök i krav..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-64"
+                    data-testid="input-search-results"
+                  />
+                </div>
               </div>
             </div>
             <CardDescription>
-              Krav visas i den ordning de fanns i ursprungsfilen. Identiska krav visas först.
+              Krav visas i exakt samma ordning som i den uppladdade Excel-filen.
+              {requirementChanges.size > 0 && (
+                <span className="text-blue-600 font-medium">
+                  {' '}Du har gjort {requirementChanges.size} ändringar som kan sparas till databasen.
+                </span>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {filteredResults
-              .sort((a, b) => {
-                // Show identical matches first
-                if (a.isIdentical && !b.isIdentical) return -1;
-                if (!a.isIdentical && b.isIdentical) return 1;
-                // Then by original file order
-                return a.newRequirement.originalIndex - b.newRequirement.originalIndex;
-              })
-              .map((result, index) => (
-                <CompareResultCard 
-                  key={index} 
-                  result={result} 
-                  getStatusIcon={getStatusIcon}
-                />
-              ))
-            }
+            {(() => {
+              const sortedResults = filteredResults.sort((a, b) => {
+                // Sort by sheet order first, then by row index within sheet - preserve exact Excel order
+                if (a.newRequirement.sheetOrder !== b.newRequirement.sheetOrder) {
+                  return a.newRequirement.sheetOrder - b.newRequirement.sheetOrder;
+                }
+                return a.newRequirement.sheetRowIndex - b.newRequirement.sheetRowIndex;
+              });
+              
+              let currentSheet = '';
+              const elements: JSX.Element[] = [];
+              
+              sortedResults.forEach((result, index) => {
+                const sheetName = result.newRequirement.categories[0]; // First category is sheet name
+                
+                // Add sheet separator when sheet changes
+                if (sheetName !== currentSheet) {
+                  currentSheet = sheetName;
+                  elements.push(
+                    <div key={`sheet-${sheetName}-${index}`} className="flex items-center gap-4 py-3">
+                      <div className="flex-1 h-px bg-border"></div>
+                      <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-md border-l-4 border-blue-500">
+                        <FileText className="h-4 w-4 text-blue-600" />
+                        <span className="text-sm font-medium text-blue-900">
+                          Flik: {sheetName}
+                        </span>
+                      </div>
+                      <div className="flex-1 h-px bg-border"></div>
+                    </div>
+                  );
+                }
+                
+                // Add the requirement card  
+                const requirementKey = generateRequirementKey(result);
+                elements.push(
+                  <CompareResultCard 
+                    key={requirementKey}
+                    result={result} 
+                    getStatusIcon={getStatusIcon}
+                    onSaveChanges={handleSaveChanges}
+                    requirementKey={requirementKey}
+                  />
+                );
+              });
+              
+              return elements;
+            })()}
           </CardContent>
         </Card>
       )}
@@ -246,10 +382,53 @@ export function ComparePage() {
 interface CompareResultCardProps {
   result: CompareResult;
   getStatusIcon: (status: string) => JSX.Element;
+  onSaveChanges: (requirementKey: string, comment: string, status: string) => void;
+  requirementKey: string;
 }
 
-function CompareResultCard({ result, getStatusIcon }: CompareResultCardProps) {
+function CompareResultCard({ result, getStatusIcon, onSaveChanges, requirementKey }: CompareResultCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [newStatus, setNewStatus] = useState('OK');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Get the most recent status from matched requirements based on date
+  const getMostRecentStatus = () => {
+    if (result.matchedRequirements.length === 0) return 'OK';
+    
+    const mostRecent = result.matchedRequirements.reduce((latest, req) => {
+      const reqDate = new Date(req.import_date || '');
+      const latestDate = new Date(latest.import_date || '');
+      return reqDate > latestDate ? req : latest;
+    });
+    
+    return mostRecent.user_status || 'OK';
+  };
+
+  // Initialize status with most recent using useEffect
+  useEffect(() => {
+    setNewStatus(getMostRecentStatus());
+  }, [result.matchedRequirements]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onSaveChanges(requirementKey, newComment.trim(), newStatus);
+      setNewComment(''); // Clear comment after saving
+    } catch (error) {
+      console.error('Failed to save changes:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const statusOptions = [
+    { value: 'OK', label: 'OK' },
+    { value: 'Granskas', label: 'Granskas' },
+    { value: 'Godkänd', label: 'Godkänd' },
+    { value: 'Avvisad', label: 'Avvisad' },
+    { value: 'Behöver förtydligande', label: 'Behöver förtydligande' }
+  ];
 
   return (
     <Card className={`${result.isIdentical ? 'border-green-200 bg-green-50' : 'border-yellow-200 bg-yellow-50'}`}>
@@ -301,7 +480,7 @@ function CompareResultCard({ result, getStatusIcon }: CompareResultCardProps) {
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span>{req.organizations?.join(', ')}</span>
                             <span>•</span>
-                            <span>{new Date(req.import_date).toLocaleDateString('sv-SE')}</span>
+                            <span>{new Date(req.import_date || '').toLocaleDateString('sv-SE')}</span>
                             <span>•</span>
                             <span>{req.occurrences} förekomster</span>
                           </div>
@@ -322,6 +501,69 @@ function CompareResultCard({ result, getStatusIcon }: CompareResultCardProps) {
               )}
             </div>
           )}
+
+          {/* Editable Comment and Status Section */}
+          <div className="border-t pt-4 mt-4 space-y-3">
+            <h4 className="text-sm font-medium text-gray-900">Lägg till kommentar och sätt status</h4>
+            
+            <div className="space-y-3">
+              {/* Comment Input */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-700">Kommentar</label>
+                <Textarea
+                  placeholder="Ange din kommentar för detta krav..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  className="min-h-[60px] text-sm"
+                  data-testid={`textarea-comment-${result.newRequirement.originalIndex}`}
+                />
+              </div>
+
+              {/* Status Select */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-700">Status</label>
+                <Select 
+                  value={newStatus} 
+                  onValueChange={setNewStatus}
+                >
+                  <SelectTrigger 
+                    className="text-sm"
+                    data-testid={`select-status-${result.newRequirement.originalIndex}`}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {statusOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Save Button */}
+              <Button
+                onClick={handleSave}
+                disabled={isSaving}
+                size="sm"
+                className="w-full"
+                data-testid={`button-save-changes-${result.newRequirement.originalIndex}`}
+              >
+                {isSaving ? (
+                  <>
+                    <Clock className="h-4 w-4 mr-2 animate-spin" />
+                    Sparar...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Spara ändringar
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

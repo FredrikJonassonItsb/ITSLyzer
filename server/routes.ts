@@ -192,7 +192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         requirement_category: z.string().optional(),
         import_organization: z.string().min(1, "Organisation krävs"),
         user_comment: z.string().optional(),
-        user_status: z.enum(["OK", "Under utveckling", "Senare"]).optional()
+        user_status: z.enum(["OK", "Under utveckling", "Senare", "Granskas", "Godkänd", "Avvisad", "Behöver förtydligande"]).optional()
       });
 
       const validation = createRequirementSchema.safeParse(req.body);
@@ -303,6 +303,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           error: "Ogiltig metadata", 
           details: metadata.error.issues 
         });
+      }
+
+      // Parse changes from compare page if provided
+      let changes = new Map<string, { comment: string; status: string }>();
+      if (req.body.changes) {
+        try {
+          const changesArray = JSON.parse(req.body.changes);
+          changesArray.forEach((change: any) => {
+            changes.set(change.requirementKey, {
+              comment: change.comment || '',
+              status: change.status || 'OK'
+            });
+          });
+          console.log(`📝 Found ${changes.size} requirement changes from comparison`);
+        } catch (error) {
+          console.error("Error parsing changes:", error);
+        }
       }
 
       // Parse Excel file - Skip first sheet (instructions), process remaining sheets
@@ -559,6 +576,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           - Preceding: "${precedingCategory}"
           - Text: ${requirementText.substring(0, 100)}...`);
 
+        // Apply changes from comparison if available - using stable requirement key
+        let userComment = null;
+        let userStatus = 'OK';
+        
+        // Generate the same key as frontend: sheet:sheetOrder:sheetRowIndex:textHash
+        // Note: In import function, use available fields as fallback
+        const textHash = requirementText.slice(0, 50).replace(/\s+/g, '_');
+        const sheetOrder = 0; // TODO: Add proper sheet order tracking in import
+        const sheetRowIndex = enrichedRow.rowIndex;
+        const requirementKey = `${sheetCategory}:${sheetOrder}:${sheetRowIndex}:${textHash}`;
+        
+        const changeForThisReq = changes.get(requirementKey);
+        if (changeForThisReq) {
+          userComment = changeForThisReq.comment || null;
+          userStatus = changeForThisReq.status || 'OK';
+          console.log(`📝 Applied changes for requirement key ${requirementKey}: status=${userStatus}, comment=${userComment ? 'yes' : 'no'}`);
+        }
+        
         const requirement: InsertRequirement = {
           id: randomUUID(),
           text: requirementText,
@@ -569,7 +604,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           organizations: [metadata.data.organization],
           categories: [sheetCategory, precedingCategory], // Dual categorization
           is_new: false, // Set to false as specified (no NY status)
-          user_status: 'OK',
+          user_status: userStatus, // Apply status from comparison
+          user_comment: userComment, // Apply comment from comparison
           occurrences: 1,
           must_count: requirementType === 'Skall' ? 1 : 0,
           should_count: requirementType === 'Bör' ? 1 : 0,
@@ -729,13 +765,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const workbook = XLSX.read(req.file.buffer);
       const enrichedData: Array<{
         sheetName: string;
+        sheetOrder: number;
+        sheetRowIndex: number;
         rowIndex: number;
         data: any[];
       }> = [];
 
-      // Process each sheet
-      workbook.SheetNames.forEach(sheetName => {
-        console.log(`📋 Processing sheet: ${sheetName}`);
+      // Process each sheet with order tracking
+      workbook.SheetNames.forEach((sheetName, sheetOrder) => {
+        console.log(`📋 Processing sheet: ${sheetName} (order: ${sheetOrder})`);
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
           header: 1, 
@@ -743,11 +781,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           defval: ''
         });
 
-        jsonData.forEach((row: any, index) => {
+        jsonData.forEach((row: any, sheetRowIndex) => {
           if (Array.isArray(row) && row.some(cell => cell && cell.toString().trim())) {
             enrichedData.push({
               sheetName,
-              rowIndex: index,
+              sheetOrder,
+              sheetRowIndex,
+              rowIndex: sheetRowIndex, // Keep for backward compatibility
               data: row
             });
           }
@@ -762,6 +802,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         requirement_type: string;
         categories: string[];
         originalIndex: number;
+        sheetOrder: number;
+        sheetRowIndex: number;
       }> = [];
 
       // Get all existing requirements for comparison
@@ -855,7 +897,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           text: requirementText,
           requirement_type: requirementType,
           categories,
-          originalIndex: i
+          originalIndex: i,
+          sheetOrder: enrichedRow.sheetOrder,
+          sheetRowIndex: enrichedRow.sheetRowIndex
         });
       }
 

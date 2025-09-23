@@ -120,9 +120,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Excel-filen måste innehålla minst en rubrikrad och en datarad" });
       }
 
-      // Extract headers and data
-      const headers = jsonData[0] as string[];
-      const dataRows = jsonData.slice(1) as any[][];
+      // Find headers and data intelligently - many Excel files have instructions before the actual table
+      let headerRowIndex = -1;
+      let headers: string[] = [];
+      let dataRows: any[][] = [];
+
+      console.log('Searching for headers in', jsonData.length, 'rows');
+      console.log('First 10 rows:', jsonData.slice(0, 10));
+
+      // Look for a row that looks like headers (contains known Swedish column terms)
+      for (let i = 0; i < Math.min(jsonData.length, 20); i++) {
+        const row = jsonData[i] as any[];
+        if (!row || row.length < 2) continue;
+
+        const rowAsString = row.join(' ').toLowerCase();
+        console.log(`Row ${i}:`, row);
+
+        // Check if this row contains header-like terms
+        const hasHeaderTerms = 
+          rowAsString.includes('krav') ||
+          rowAsString.includes('text') ||
+          rowAsString.includes('beskrivning') ||
+          rowAsString.includes('typ') ||
+          rowAsString.includes('kategori') ||
+          rowAsString.includes('organisation') ||
+          rowAsString.includes('funktion') ||
+          rowAsString.includes('id') ||
+          rowAsString.includes('nr') ||
+          rowAsString.includes('requirement') ||
+          rowAsString.includes('description');
+
+        if (hasHeaderTerms) {
+          headerRowIndex = i;
+          headers = row.map(cell => cell?.toString() || '');
+          dataRows = jsonData.slice(i + 1) as any[][];
+          console.log('Found headers at row', i, ':', headers);
+          break;
+        }
+      }
+
+      // Fallback: if no clear headers found, use first non-empty row as headers
+      if (headerRowIndex === -1) {
+        for (let i = 0; i < Math.min(jsonData.length, 10); i++) {
+          const row = jsonData[i] as any[];
+          if (row && row.length > 1 && row.some(cell => cell && cell.toString().trim())) {
+            headerRowIndex = i;
+            headers = row.map(cell => cell?.toString() || '');
+            dataRows = jsonData.slice(i + 1) as any[][];
+            console.log('Fallback: using row', i, 'as headers:', headers);
+            break;
+          }
+        }
+      }
+
+      console.log('Final headers:', headers);
+      console.log('Number of data rows:', dataRows.length);
+      console.log('First few data rows:', dataRows.slice(0, 3));
 
       // Process requirements from Excel data
       const requirements: InsertRequirement[] = [];
@@ -140,24 +193,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let category = '';
 
         for (let j = 0; j < row.length && j < headers.length; j++) {
-          const header = headers[j]?.toString().toLowerCase() || '';
+          const header = headers[j]?.toString().toLowerCase().trim() || '';
           const value = row[j]?.toString().trim() || '';
 
           if (!value) continue;
 
-          // Identify requirement text
-          if (header.includes('krav') || header.includes('text') || header.includes('beskrivning') || j === 0) {
-            if (!requirementText) requirementText = value;
+          // More flexible requirement text identification
+          const isRequirementColumn = 
+            header.includes('krav') || 
+            header.includes('text') || 
+            header.includes('beskrivning') ||
+            header.includes('innehåll') ||
+            header.includes('specifikation') ||
+            header.includes('funktion') ||
+            header.includes('requirement') ||
+            header.includes('description') ||
+            header.includes('spec') ||
+            header === 'a' || // Sometimes Excel uses simple letter headers
+            header === 'b' ||
+            j === 0 || // Fallback to first column
+            (j < 3 && value.length > 20); // Assume longer text in first few columns might be requirements
+
+          if (isRequirementColumn && !requirementText && value.length > 5) {
+            requirementText = value;
           }
 
-          // Identify requirement type (Skall/Bör)
-          if (header.includes('typ') || header.includes('type') || header.includes('skall') || header.includes('bör')) {
-            if (value.toLowerCase().includes('skall')) requirementType = 'Skall';
-            else if (value.toLowerCase().includes('bör')) requirementType = 'Bör';
+          // More flexible requirement type identification  
+          const isTypeColumn = 
+            header.includes('typ') || 
+            header.includes('type') || 
+            header.includes('skall') || 
+            header.includes('bör') ||
+            header.includes('shall') ||
+            header.includes('should') ||
+            header.includes('must') ||
+            header.includes('obligatorisk') ||
+            header.includes('frivillig');
+
+          if (isTypeColumn) {
+            const lowerValue = value.toLowerCase();
+            if (lowerValue.includes('skall') || lowerValue.includes('ska') || lowerValue.includes('must') || lowerValue.includes('shall')) {
+              requirementType = 'Skall';
+            } else if (lowerValue.includes('bör') || lowerValue.includes('should') || lowerValue.includes('önskas')) {
+              requirementType = 'Bör';
+            }
           }
 
-          // Identify category
-          if (header.includes('kategori') || header.includes('category') || header.includes('grupp')) {
+          // More flexible category identification
+          const isCategoryColumn = 
+            header.includes('kategori') || 
+            header.includes('category') || 
+            header.includes('grupp') ||
+            header.includes('område') ||
+            header.includes('domän') ||
+            header.includes('typ') ||
+            header.includes('ämne') ||
+            header.includes('subject') ||
+            header.includes('topic');
+
+          if (isCategoryColumn && !category && value.length > 0) {
             category = value;
           }
         }

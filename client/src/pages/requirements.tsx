@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { RequirementsTable } from '@/components/requirements-table';
+import { CreateRequirementDialog } from '@/components/create-requirement-dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Filter, Download, Upload, Brain, BarChart3 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import type { FilterOptions } from '@shared/schema';
+import type { FilterOptions, Requirement } from '@shared/schema';
 
 export function RequirementsPage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -22,7 +23,7 @@ export function RequirementsPage() {
   const [activeTab, setActiveTab] = useState('all');
 
   // Fetch requirements with filters
-  const { data: requirements = [], isLoading, refetch } = useQuery({
+  const { data: requirements = [], isLoading, refetch } = useQuery<Requirement[]>({
     queryKey: ['/api/requirements', { 
       searchQuery, 
       requirementTypes: selectedTypes,
@@ -95,6 +96,7 @@ export function RequirementsPage() {
         </div>
         
         <div className="flex items-center gap-3">
+          <CreateRequirementDialog onRefresh={refetch} />
           <Button 
             variant="outline" 
             onClick={handleExport}

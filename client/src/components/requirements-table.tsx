@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, Users, Calendar, Building, MessageSquare, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { ChevronDown, ChevronRight, Users, Calendar, Building, MessageSquare, CheckCircle, AlertCircle, Clock, Trash2 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Requirement } from '@shared/schema';
 
@@ -35,6 +36,25 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
       
       if (!response.ok) {
         throw new Error('Failed to update requirement');
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/requirements'] });
+      onRefresh?.();
+    }
+  });
+
+  // Delete requirement mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/requirements/${id}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete requirement');
       }
       
       return response.json();
@@ -157,10 +177,10 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
                   {/* Badges and Info */}
                   <div className="flex items-center flex-wrap gap-2">
                     <Badge 
-                      variant={getTypeVariant(req.requirement_type)}
+                      variant={getTypeVariant(req.requirement_type || 'Skall')}
                       data-testid={`badge-type-${req.id}`}
                     >
-                      {req.requirement_type}
+                      {req.requirement_type || 'Skall'}
                     </Badge>
                     
                     {req.group_id && (
@@ -214,16 +234,53 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
                       </div>
                     </div>
                   ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => startEditStatus(req)}
-                      className="flex items-center gap-2 h-auto p-2"
-                      data-testid={`button-status-${req.id}`}
-                    >
-                      {getStatusIcon(req.user_status || 'OK')}
-                      <span className="text-xs">{req.user_status || 'OK'}</span>
-                    </Button>
+                    <div className="flex flex-col items-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => startEditStatus(req)}
+                        className="flex items-center gap-2 h-auto p-2"
+                        data-testid={`button-status-${req.id}`}
+                      >
+                        {getStatusIcon(req.user_status || 'OK')}
+                        <span className="text-xs">{req.user_status || 'OK'}</span>
+                      </Button>
+                      
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={deleteMutation.isPending}
+                            className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            data-testid={`button-delete-${req.id}`}
+                            title="Ta bort krav"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Bekräfta borttagning</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Är du säker på att du vill ta bort detta krav? Denna åtgärd kan inte ångras.
+                              <br /><br />
+                              <strong>Krav:</strong> {req.text.length > 100 ? req.text.substring(0, 100) + '...' : req.text}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => deleteMutation.mutate(req.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              data-testid={`button-confirm-delete-${req.id}`}
+                            >
+                              Ta bort
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   )}
                 </div>
               </div>

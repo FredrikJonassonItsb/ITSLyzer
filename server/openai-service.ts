@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import type { Requirement, RequirementGroup } from "@shared/schema";
 
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
+// Using reliable OpenAI model for Swedish requirement analysis
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 interface GroupingResult {
@@ -167,33 +167,46 @@ Svara med JSON i följande format:
 
 Gruppera endast krav som verkligen är relaterade. Lämna krav ogruperade om de inte passar naturligt ihop med andra.`;
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-5",
-        messages: [
-          {
-            role: "system",
-            content: "Du är en expert på svensk IT-upphandling och kravanalys. Du analyserar tekniska krav och grupperar dem intelligent baserat på funktionalitet och teknikområde. Svara alltid med giltigt JSON."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        response_format: { type: "json_object" },
-      });
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      
+      let response;
+      try {
+        response = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "system",
+              content: "Du är en expert på svensk IT-upphandling och kravanalys. Du analyserar tekniska krav och grupperar dem intelligent baserat på funktionalitet och teknikområde. Svara alltid med giltigt JSON."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          response_format: { type: "json_object" },
+        }, { signal: controller.signal, timeout: 60000 });
+        clearTimeout(timeoutId);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          throw new Error('OpenAI API call timed out after 60 seconds');
+        }
+        throw error;
+      }
 
       const result = JSON.parse(response.choices[0].message.content || '{}');
       
       // Validate and clean the result
       const groups: RequirementGroup[] = (result.groups || [])
         .filter((group: any) => 
-          group.groupId && 
           group.representativeId && 
           Array.isArray(group.members) && 
           group.members.length >= 2
         )
         .map((group: any) => ({
-          groupId: group.groupId,
+          groupId: this.generateUniqueGroupId(),
           representativeId: group.representativeId,
           members: group.members.filter((id: string) => 
             requirements.some(req => req.id === id)
@@ -249,19 +262,33 @@ Vanliga kategorier inom IT-upphandling:
 
 Svara endast med kategorins namn (max 3 ord).`;
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-5",
-        messages: [
-          {
-            role: "system",
-            content: "Du kategoriserar IT-krav på svenska. Svara endast med kategorins namn."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-      });
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      let response;
+      try {
+        response = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "system",
+              content: "Du kategoriserar IT-krav på svenska. Svara endast med kategorins namn."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+        }, { signal: controller.signal, timeout: 30000 });
+        clearTimeout(timeoutId);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          throw new Error('OpenAI API call timed out after 30 seconds');
+        }
+        throw error;
+      }
 
       return response.choices[0].message.content?.trim() || 'Okategoriserad';
 
@@ -287,19 +314,33 @@ ${groups.map(g => `- ${g.category}: ${g.members.length} krav (likhetspoäng: ${g
 
 Skapa en sammanfattning på 2-3 meningar om grupperingsresultatet och dess nytta för kravanalysen.`;
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-5",
-        messages: [
-          {
-            role: "system", 
-            content: "Du sammanfattar resultat från kravgruppering på svenska på ett professionellt sätt."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-      });
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      let response;
+      try {
+        response = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "system", 
+              content: "Du sammanfattar resultat från kravgruppering på svenska på ett professionellt sätt."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+        }, { signal: controller.signal, timeout: 30000 });
+        clearTimeout(timeoutId);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          throw new Error('OpenAI API call timed out after 30 seconds');
+        }
+        throw error;
+      }
 
       return response.choices[0].message.content?.trim() || 'Gruppering slutförd.';
 

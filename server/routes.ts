@@ -6,6 +6,7 @@ import multer from "multer";
 import * as XLSX from "xlsx";
 import { z } from "zod";
 import { uploadExcelSchema, filterSchema, type InsertRequirement } from "@shared/schema";
+import { generateRequirementKey } from "@shared/generateRequirementKey";
 import { randomUUID } from "crypto";
 
 // Configure multer for file upload
@@ -339,37 +340,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let allJsonData: any[][] = [];
       let combinedHeaders: string[] = [];
 
-      // Enhanced processing for dual categorization: track sheet context
+      // Enhanced processing for dual categorization: track sheet context with ordering
       let enrichedData: Array<{
         data: any[];
         sheetName: string;
+        sheetOrder: number;
+        sheetRowIndex: number;
         rowIndex: number;
         originalSheetRowIndex: number;
       }> = [];
 
       // Process each sheet (except the first one) with enhanced tracking
-      for (const sheetName of sheetsToProcess) {
-        console.log(`\n=== Processing sheet: ${sheetName} ===`);
+      sheetsToProcess.forEach((sheetName, sheetOrder) => {
+        console.log(`\n=== Processing sheet: ${sheetName} (order: ${sheetOrder}) ===`);
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
         if (jsonData.length < 2) {
           console.log(`Skipping sheet ${sheetName} - too few rows`);
-          continue;
+          return; // Use return instead of continue in forEach
         }
 
-        // Enrich each row with sheet context
+        // Enrich each row with sheet context including sheetOrder
         for (let i = 0; i < jsonData.length; i++) {
           enrichedData.push({
             data: jsonData[i] as any[],
             sheetName: sheetName,
+            sheetOrder: sheetOrder,
+            sheetRowIndex: i,
             rowIndex: allJsonData.length + i,
             originalSheetRowIndex: i
           });
         }
 
         allJsonData = allJsonData.concat(jsonData);
-      }
+      });
 
       if (allJsonData.length < 2) {
         return res.status(400).json({ error: "Inga giltiga kalkylblad med krav hittades" });
@@ -580,12 +585,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let userComment = null;
         let userStatus = 'OK';
         
-        // Generate the same key as frontend: sheet:sheetOrder:sheetRowIndex:textHash
-        // Note: In import function, use available fields as fallback
-        const textHash = requirementText.slice(0, 50).replace(/\s+/g, '_');
-        const sheetOrder = 0; // TODO: Add proper sheet order tracking in import
-        const sheetRowIndex = enrichedRow.rowIndex;
-        const requirementKey = `${sheetCategory}:${sheetOrder}:${sheetRowIndex}:${textHash}`;
+        // Generate the same key as frontend using shared helper with correct values
+        const requirementKey = generateRequirementKey(
+          sheetCategory, 
+          enrichedRow.sheetOrder, 
+          enrichedRow.sheetRowIndex, 
+          requirementText
+        );
         
         const changeForThisReq = changes.get(requirementKey);
         if (changeForThisReq) {

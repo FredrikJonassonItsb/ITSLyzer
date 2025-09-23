@@ -10,6 +10,7 @@ import { Upload, GitCompare, Search, FileText, MessageSquare, CheckCircle, Alert
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import type { Requirement } from '@shared/schema';
+import { generateRequirementKey } from '@shared/generateRequirementKey';
 
 interface CompareResult {
   newRequirement: {
@@ -37,11 +38,15 @@ export function ComparePage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Generate stable key for requirement tracking across sheets
-  const generateRequirementKey = (result: CompareResult) => {
+  // Generate stable key for requirement tracking across sheets using shared helper
+  const getRequirementKey = (result: CompareResult) => {
     const sheet = result.newRequirement.categories[0] || 'unknown';
-    const textHash = result.newRequirement.text.slice(0, 50).replace(/\s+/g, '_');
-    return `${sheet}:${result.newRequirement.sheetOrder}:${result.newRequirement.sheetRowIndex}:${textHash}`;
+    return generateRequirementKey(
+      sheet,
+      result.newRequirement.sheetOrder,
+      result.newRequirement.sheetRowIndex,
+      result.newRequirement.text
+    );
   };
 
   // Handle saving changes for a requirement
@@ -339,7 +344,7 @@ export function ComparePage() {
                 }
                 
                 // Add the requirement card  
-                const requirementKey = generateRequirementKey(result);
+                const requirementKey = getRequirementKey(result);
                 elements.push(
                   <CompareResultCard 
                     key={requirementKey}

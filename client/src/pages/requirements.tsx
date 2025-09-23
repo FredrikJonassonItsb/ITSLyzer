@@ -20,7 +20,8 @@ export function RequirementsPage() {
   const [selectedStatus, setSelectedStatus] = useState<string[]>(['all']);
   const [showOnlyNew, setShowOnlyNew] = useState(false);
   const [showGrouped, setShowGrouped] = useState(false);
-  const [activeTab, setActiveTab] = useState('all');
+  const [selectedSheetCategory, setSelectedSheetCategory] = useState<string>('all');
+  const [selectedSectionCategory, setSelectedSectionCategory] = useState<string>('all');
 
   // Fetch requirements with filters
   const { data: requirements = [], isLoading, refetch } = useQuery<Requirement[]>({
@@ -45,6 +46,16 @@ export function RequirementsPage() {
     requirements.flatMap(req => req.categories || [])
   )).filter(Boolean);
 
+  // Get unique sheet categories (first category level)
+  const uniqueSheetCategories = Array.from(new Set(
+    requirements.map(req => req.categories?.[0]).filter(Boolean)
+  ));
+
+  // Get unique section categories (second category level)
+  const uniqueSectionCategories = Array.from(new Set(
+    requirements.map(req => req.categories?.[1]).filter(Boolean)
+  ));
+
   const handleExport = () => {
     console.log('Exporting requirements...', { 
       count: requirements.length,
@@ -61,26 +72,25 @@ export function RequirementsPage() {
     setSelectedStatus(['all']);
     setShowOnlyNew(false);
     setShowGrouped(false);
+    setSelectedSheetCategory('all');
+    setSelectedSectionCategory('all');
   };
 
   const filteredRequirements = requirements.filter(req => {
-    // Tab filtering
-    if (activeTab === 'new' && !req.is_new) return false;
-    if (activeTab === 'grouped' && !req.group_id) return false;
-    if (activeTab === 'mustHave' && req.requirement_type !== 'Skall') return false;
-    if (activeTab === 'shouldHave' && req.requirement_type !== 'Bör') return false;
+    // Category filtering
+    if (selectedSheetCategory !== 'all' && req.categories?.[0] !== selectedSheetCategory) return false;
+    if (selectedSectionCategory !== 'all' && req.categories?.[1] !== selectedSectionCategory) return false;
     
     return true;
   });
 
-  const getTabCount = (tab: string) => {
-    switch (tab) {
-      case 'all': return requirements.length;
-      case 'new': return requirements.filter(req => req.is_new).length;
-      case 'grouped': return requirements.filter(req => req.group_id).length;
-      case 'mustHave': return requirements.filter(req => req.requirement_type === 'Skall').length;
-      case 'shouldHave': return requirements.filter(req => req.requirement_type === 'Bör').length;
-      default: return 0;
+  const getCategoryCount = (categoryType: 'sheet' | 'section', category: string) => {
+    if (category === 'all') return requirements.length;
+    
+    if (categoryType === 'sheet') {
+      return requirements.filter(req => req.categories?.[0] === category).length;
+    } else {
+      return requirements.filter(req => req.categories?.[1] === category).length;
     }
   };
 
@@ -319,28 +329,71 @@ export function RequirementsPage() {
         </CardContent>
       </Card>
 
-      {/* Requirements Tabs */}
+      {/* Category-based filtering */}
       <Card>
         <CardHeader>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="all" data-testid="tab-all">
-                Alla ({getTabCount('all')})
-              </TabsTrigger>
-              <TabsTrigger value="new" data-testid="tab-new">
-                Nya ({getTabCount('new')})
-              </TabsTrigger>
-              <TabsTrigger value="grouped" data-testid="tab-grouped">
-                Grupperade ({getTabCount('grouped')})
-              </TabsTrigger>
-              <TabsTrigger value="mustHave" data-testid="tab-must">
-                Skall ({getTabCount('mustHave')})
-              </TabsTrigger>
-              <TabsTrigger value="shouldHave" data-testid="tab-should">
-                Bör ({getTabCount('shouldHave')})
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-medium mb-3">Filtrera efter kategorier</h3>
+              
+              {/* Sheet Category (First Level) */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">Flik / Avsnitt</label>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant={selectedSheetCategory === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedSheetCategory('all')}
+                    data-testid="category-sheet-all"
+                  >
+                    Alla ({getCategoryCount('sheet', 'all')})
+                  </Button>
+                  {uniqueSheetCategories.map(category => (
+                    <Button
+                      key={category}
+                      variant={selectedSheetCategory === category ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSelectedSheetCategory(category)}
+                      data-testid={`category-sheet-${category.replace(/\s+/g, '-').toLowerCase()}`}
+                    >
+                      {category} ({getCategoryCount('sheet', category)})
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Section Category (Second Level) */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">Sektion / Kategori</label>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant={selectedSectionCategory === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedSectionCategory('all')}
+                    data-testid="category-section-all"
+                  >
+                    Alla ({getCategoryCount('section', 'all')})
+                  </Button>
+                  {uniqueSectionCategories.slice(0, 10).map(category => (
+                    <Button
+                      key={category}
+                      variant={selectedSectionCategory === category ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSelectedSectionCategory(category)}
+                      data-testid={`category-section-${category.replace(/\s+/g, '-').toLowerCase()}`}
+                    >
+                      {category} ({getCategoryCount('section', category)})
+                    </Button>
+                  ))}
+                  {uniqueSectionCategories.length > 10 && (
+                    <Badge variant="outline" className="ml-2">
+                      +{uniqueSectionCategories.length - 10} fler
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <RequirementsTable 

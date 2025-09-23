@@ -522,30 +522,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
                                   lookbackRowText.includes('must');
           
           if (!isRequirementRow) {
-            // Found a non-requirement row, extract meaningful text
-            const meaningfulText = lookbackRow.data.find(cell => {
-              const cellText = cell?.toString().trim() || '';
-              return cellText.length > 2 && 
-                     !cellText.match(/^\d+$/) && // Skip pure numbers
-                     !cellText.match(/^[A-Z]\d*$/) && // Skip simple cell references like "A1"
-                     cellText !== 'OF' && cellText !== 'Ska' && cellText !== 'Bör'; // Skip common headers
-            });
+            // Found a non-requirement row, extract meaningful text from Column B (index 1)
+            const columnBText = lookbackRow.data[1]?.toString().trim() || '';
             
-            if (meaningfulText) {
-              const categoryText = meaningfulText.toString().trim();
+            // Check if Column B has valid category text
+            if (columnBText.length > 2 && 
+                !columnBText.match(/^\d+$/) && // Skip pure numbers
+                !columnBText.match(/^[A-Z]\d*$/) && // Skip simple cell references like "A1"
+                columnBText !== 'OF' && columnBText !== 'Ska' && columnBText !== 'Bör') { // Skip common headers
+              
+              console.log(`🔍 Checking Column B text: "${columnBText}"`);
               
               // Improve category quality: avoid purely numeric section references
-              const isNumericSection = /^\d+(\.\d+)*\.?$/.test(categoryText); // e.g. "3.1", "8.20"
-              const isDescriptiveCategory = categoryText.length > 5 && /[a-zA-ZåäöÅÄÖ]/.test(categoryText);
+              const isNumericSection = /^\d+(\.\d+)*\.?$/.test(columnBText); // e.g. "3.1", "8.20"
+              const isDescriptiveCategory = columnBText.length > 5 && /[a-zA-ZåäöÅÄÖ]/.test(columnBText);
               
               if (isDescriptiveCategory && !isNumericSection) {
-                precedingCategoryText = categoryText;
-                console.log(`📝 Found descriptive preceding category: "${precedingCategoryText}"`);
+                precedingCategoryText = columnBText;
+                console.log(`📝 Found descriptive preceding category from Column B: "${precedingCategoryText}"`);
                 break;
-              } else if (!precedingCategoryText && categoryText.length > 2) {
+              } else if (!precedingCategoryText && columnBText.length > 2) {
                 // Fallback to any non-empty text if no descriptive category found yet
-                precedingCategoryText = categoryText;
-                console.log(`📝 Found fallback preceding category: "${precedingCategoryText}"`);
+                precedingCategoryText = columnBText;
+                console.log(`📝 Found fallback preceding category from Column B: "${precedingCategoryText}"`);
               }
             }
           }

@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { ChevronDown, ChevronRight, Users, Calendar, Building, MessageSquare, CheckCircle, AlertCircle, Clock, Trash2, Brain } from 'lucide-react';
+import { ChevronDown, ChevronRight, Users, Calendar, Building, MessageSquare, CheckCircle, AlertCircle, Clock, Trash2, Brain, FileText, Tag } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Requirement } from '@shared/schema';
 
@@ -252,6 +252,20 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
                   <Badge variant="outline">
                     {req.occurrences} förekomster
                   </Badge>
+                )}
+                
+                {/* Category badges - show both category levels */}
+                {req.categories && req.categories.length >= 2 && (
+                  <>
+                    <Badge variant="outline" className="gap-1 bg-blue-50 text-blue-700 border-blue-200" data-testid={`badge-category-sheet-${req.id}`}>
+                      <FileText className="h-3 w-3" />
+                      {req.categories[0]}
+                    </Badge>
+                    <Badge variant="outline" className="gap-1 bg-green-50 text-green-700 border-green-200" data-testid={`badge-category-section-${req.id}`}>
+                      <Tag className="h-3 w-3" />
+                      {req.categories[1]}
+                    </Badge>
+                  </>
                 )}
               </div>
             </div>

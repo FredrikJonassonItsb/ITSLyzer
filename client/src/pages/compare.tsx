@@ -244,15 +244,15 @@ export function ComparePage() {
 
       {/* File Upload */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <div className="p-6 pb-4">
+          <h2 className="text-xl font-semibold flex items-center gap-2">
             <Upload className="h-5 w-5" />
             Ladda upp ny kravfil för jämförelse
-          </CardTitle>
-          <CardDescription>
+          </h2>
+          <p className="text-sm text-muted-foreground mt-2">
             Välj en Excel-fil med krav som ska jämföras mot tidigare importerade krav.
-          </CardDescription>
-        </CardHeader>
+          </p>
+        </div>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <label htmlFor="file" className="text-sm font-medium">

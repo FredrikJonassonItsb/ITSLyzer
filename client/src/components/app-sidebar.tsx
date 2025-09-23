@@ -1,4 +1,4 @@
-import { Home, Upload, FileSpreadsheet, Brain, BarChart3, Settings } from 'lucide-react';
+import { Home, Upload, FileSpreadsheet, Brain, BarChart3, GitCompare, Settings } from 'lucide-react';
 import { useLocation } from 'wouter';
 import {
   Sidebar,
@@ -30,6 +30,12 @@ const menuItems = [
     url: '/requirements',
     icon: FileSpreadsheet,
     testId: 'nav-requirements'
+  },
+  {
+    title: 'Jämföra',
+    url: '/compare',
+    icon: GitCompare,
+    testId: 'nav-compare'
   },
   {
     title: 'AI-gruppering',

@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import HomePage from "@/pages/home";
 import ImportPage from "@/pages/import";
 import RequirementsPage from "@/pages/requirements";
+import ComparePage from "@/pages/compare";
 import AIGroupingPage from "@/pages/ai-grouping";
 import StatisticsPage from "@/pages/statistics";
 import NotFound from "@/pages/not-found";
@@ -19,6 +20,7 @@ function Router() {
       <Route path="/" component={HomePage} />
       <Route path="/import" component={ImportPage} />
       <Route path="/requirements" component={RequirementsPage} />
+      <Route path="/compare" component={ComparePage} />
       <Route path="/ai-grouping" component={AIGroupingPage} />
       <Route path="/statistics" component={StatisticsPage} />
       <Route component={NotFound} />

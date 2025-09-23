@@ -646,51 +646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Save requirements to database
       const savedRequirements = await storage.createManyRequirements(requirements);
 
-      // Automatically perform AI grouping after successful import
-      console.log('Starting automatic AI grouping after import...');
-      let aiGroupsFound = 0;
-      try {
-        // Get all requirements for grouping (including the newly imported ones)
-        const allRequirements = await storage.getRequirementsForGrouping();
-        
-        if (allRequirements.length > 1) {
-          console.log(`Performing AI grouping on ${allRequirements.length} total requirements...`);
-          const groupingResult = await openaiService.groupRequirements(allRequirements);
-
-          // Clear all existing groupings first
-          await storage.clearAllGroupings();
-
-          // Update database with new grouping results
-          for (const group of groupingResult.groups) {
-            // Mark representative requirement
-            await storage.updateRequirementGroup(
-              group.representativeId, 
-              group.groupId, 
-              true, 
-              group.similarityScore, 
-              group.category
-            );
-
-            // Mark other group members
-            for (const memberId of group.members) {
-              await storage.updateRequirementGroup(
-                memberId, 
-                group.groupId, 
-                false, 
-                group.similarityScore, 
-                group.category
-              );
-            }
-          }
-          
-          aiGroupsFound = groupingResult.groups.length;
-          console.log(`✅ Automatic AI grouping completed: ${aiGroupsFound} groups created`);
-        }
-      } catch (aiError) {
-        console.error("Warning: Automatic AI grouping failed:", aiError);
-        // Don't fail the import if AI grouping fails
-      }
-
+      // Send response immediately - don't block on AI grouping
       res.json({
         success: true,
         totalRequirements: savedRequirements.length,
@@ -699,13 +655,245 @@ export async function registerRoutes(app: Express): Promise<Server> {
         organization: metadata.data.organization,
         categories: Array.from(new Set(requirements.map(r => r.requirement_category).filter(Boolean))),
         processingTime: Date.now() - req.body.startTime || 0,
-        aiGroupsFound: aiGroupsFound
+        aiGroupsFound: 0 // Will be updated asynchronously
       });
+
+      // Perform AI grouping asynchronously in background - don't block import response
+      (async () => {
+        try {
+          console.log('Starting background AI grouping after import...');
+          
+          // Get all requirements for grouping (including the newly imported ones)
+          const allRequirements = await storage.getRequirementsForGrouping();
+          
+          if (allRequirements.length > 1) {
+            console.log(`Performing AI grouping on ${allRequirements.length} total requirements...`);
+            const groupingResult = await openaiService.groupRequirements(allRequirements);
+
+            // Clear all existing groupings first
+            await storage.clearAllGroupings();
+
+            // Update database with new grouping results
+            for (const group of groupingResult.groups) {
+              // Mark representative requirement
+              await storage.updateRequirementGroup(
+                group.representativeId, 
+                group.groupId, 
+                true, 
+                group.similarityScore, 
+                group.category
+              );
+
+              // Mark other group members
+              for (const memberId of group.members) {
+                await storage.updateRequirementGroup(
+                  memberId, 
+                  group.groupId, 
+                  false, 
+                  group.similarityScore, 
+                  group.category
+                );
+              }
+            }
+            
+            console.log(`✅ Background AI grouping completed: ${groupingResult.groups.length} groups created`);
+          }
+        } catch (aiError) {
+          console.error("Warning: Background AI grouping failed:", aiError);
+          // AI grouping failure doesn't affect import success
+        }
+      })();
 
     } catch (error) {
       console.error("Error importing Excel file:", error);
       res.status(500).json({ 
         error: "Kunde inte importera Excel-fil", 
+        details: error instanceof Error ? error.message : 'Okänt fel' 
+      });
+    }
+  });
+
+  // Compare API - upload file and compare against existing requirements
+  app.post("/api/compare", upload.single('file'), async (req, res) => {
+    try {
+      console.log("🔍 Compare request received");
+      
+      if (!req.file || !req.body.organization) {
+        return res.status(400).json({ error: "Fil och organisation krävs" });
+      }
+
+      const organization = req.body.organization.trim();
+      console.log(`📊 Starting comparison for organization: ${organization}`);
+
+      // Parse Excel file (reuse existing logic)
+      const workbook = XLSX.read(req.file.buffer);
+      const enrichedData: Array<{
+        sheetName: string;
+        rowIndex: number;
+        data: any[];
+      }> = [];
+
+      // Process each sheet
+      workbook.SheetNames.forEach(sheetName => {
+        console.log(`📋 Processing sheet: ${sheetName}`);
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+          header: 1, 
+          raw: false,
+          defval: ''
+        });
+
+        jsonData.forEach((row: any, index) => {
+          if (Array.isArray(row) && row.some(cell => cell && cell.toString().trim())) {
+            enrichedData.push({
+              sheetName,
+              rowIndex: index,
+              data: row
+            });
+          }
+        });
+      });
+
+      console.log(`📊 Total enriched rows: ${enrichedData.length}`);
+
+      // Extract requirements from file (reuse existing parsing logic)
+      const newRequirements: Array<{
+        text: string;
+        requirement_type: string;
+        categories: string[];
+        originalIndex: number;
+      }> = [];
+
+      // Get all existing requirements for comparison
+      const existingRequirements = await storage.getAllRequirements();
+      console.log(`📋 Found ${existingRequirements.length} existing requirements for comparison`);
+
+      for (let i = 0; i < enrichedData.length; i++) {
+        const enrichedRow = enrichedData[i];
+        let requirementText = '';
+        let requirementType = '';
+
+        // Extract requirement text and type (reuse existing logic)
+        for (const cell of enrichedRow.data) {
+          const cellText = cell?.toString().trim() || '';
+          
+          // Check if this cell contains requirement keywords
+          const hasRequirementKeywords = /\b(ska|skall|bör|shall|should|must)\b/i.test(cellText);
+          
+          if (hasRequirementKeywords && cellText.length > 30) {
+            requirementText = cellText;
+            
+            // Determine requirement type
+            if (/\b(ska|skall|shall|must)\b/i.test(cellText)) {
+              requirementType = 'Skall';
+            } else if (/\b(bör|should)\b/i.test(cellText)) {
+              requirementType = 'Bör';
+            }
+            break;
+          }
+        }
+
+        if (!requirementText || requirementText.length < 30) continue;
+
+        // Apply same filtering logic as import
+        const wordCount = requirementText.split(/\s+/).length;
+        const sentenceCount = (requirementText.match(/\./g) || []).length;
+        
+        // Skip if doesn't meet quality criteria
+        if (wordCount < 5 || wordCount > 100 || sentenceCount > 5) continue;
+        if (requirementText.length < 30 || requirementText.length > 500) continue;
+        
+        // Skip meta-requirements and section descriptions
+        const skipPatterns = [
+          /leverantören ska beskriva/i,
+          /kraven i denna flik/i,
+          /denna flik/i,
+          /följande aktiviteter:/i,
+          /omfatta följande/i,
+          /informationssäkerhetskrav/i,
+          /konsekvensnivå/i
+        ];
+        
+        if (skipPatterns.some(pattern => pattern.test(requirementText))) continue;
+
+        // Find categories (sheet name + Column B)
+        let precedingCategoryText = '';
+        
+        // Look backwards for Column B category text
+        for (let lookbackIndex = i - 1; lookbackIndex >= 0; lookbackIndex--) {
+          const lookbackRow = enrichedData[lookbackIndex];
+          
+          if (lookbackRow.sheetName !== enrichedRow.sheetName) break;
+          
+          const lookbackRowText = lookbackRow.data.join(' ').toLowerCase();
+          const isRequirementRow = /\b(ska|skall|bör|shall|should|must)\b/i.test(lookbackRowText);
+          
+          if (!isRequirementRow) {
+            const columnBText = lookbackRow.data[1]?.toString().trim() || '';
+            
+            if (columnBText.length > 2 && 
+                !columnBText.match(/^\d+$/) &&
+                !columnBText.match(/^[A-Z]\d*$/) &&
+                columnBText !== 'OF' && columnBText !== 'Ska' && columnBText !== 'Bör') {
+              
+              const isNumericSection = /^\d+(\.\d+)*\.?$/.test(columnBText);
+              const isDescriptiveCategory = columnBText.length > 5 && /[a-zA-ZåäöÅÄÖ]/.test(columnBText);
+              
+              if (isDescriptiveCategory && !isNumericSection) {
+                precedingCategoryText = columnBText;
+                break;
+              } else if (!precedingCategoryText && columnBText.length > 2) {
+                precedingCategoryText = columnBText;
+              }
+            }
+          }
+        }
+
+        const categories = [enrichedRow.sheetName, precedingCategoryText || 'Okategoriserad'];
+
+        newRequirements.push({
+          text: requirementText,
+          requirement_type: requirementType,
+          categories,
+          originalIndex: i
+        });
+      }
+
+      console.log(`✅ Extracted ${newRequirements.length} requirements from uploaded file`);
+
+      // Compare each new requirement against existing ones
+      const compareResults: Array<{
+        newRequirement: typeof newRequirements[0];
+        matchedRequirements: typeof existingRequirements;
+        isIdentical: boolean;
+        similarityScore?: number;
+      }> = [];
+
+      for (const newReq of newRequirements) {
+        const matches = existingRequirements.filter(existingReq => {
+          // Primary: exact text match (case-insensitive, trimmed)
+          const newText = newReq.text.toLowerCase().trim();
+          const existingText = existingReq.text.toLowerCase().trim();
+          return newText === existingText;
+        });
+
+        compareResults.push({
+          newRequirement: newReq,
+          matchedRequirements: matches,
+          isIdentical: matches.length > 0,
+          similarityScore: matches.length > 0 ? 1.0 : 0.0
+        });
+      }
+
+      console.log(`🔍 Comparison complete: ${compareResults.length} results generated`);
+      console.log(`📊 Identical matches found: ${compareResults.filter(r => r.isIdentical).length}`);
+
+      res.json(compareResults);
+
+    } catch (error) {
+      console.error("Error in compare API:", error);
+      res.status(500).json({ 
+        error: "Kunde inte jämföra krav", 
         details: error instanceof Error ? error.message : 'Okänt fel' 
       });
     }

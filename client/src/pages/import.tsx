@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { CheckCircle, AlertCircle, Clock, FileSpreadsheet, Upload, Building, FileText } from 'lucide-react';
+import { useLocation } from 'wouter';
 
 type ImportStage = 'upload' | 'parsing' | 'analyzing' | 'complete' | 'error';
 
@@ -29,6 +30,7 @@ export function ImportPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [organization, setOrganization] = useState('');
   const [description, setDescription] = useState('');
+  const [, setLocation] = useLocation();
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -92,6 +94,11 @@ export function ImportPage() {
       setSelectedFile(null);
       setOrganization('');
       setDescription('');
+
+      // Auto-redirect to compare page after successful import
+      setTimeout(() => {
+        setLocation('/compare');
+      }, 2000); // Wait 2 seconds to show success message
       
     } catch (error) {
       console.error('Import error:', error);

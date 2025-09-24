@@ -951,54 +951,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const isIdentical = matches.length > 0;
         let aiGroupedRequirements: typeof existingRequirements = [];
+        const includedIds = new Set<string>(); // For deduplication
 
-        // If no identical match, look for AI-grouped similar requirements
-        if (!isIdentical) {
-          const newReqCategory = newReq.categories[0] || 'Okategoriserad';
-          
-          // Find requirements in the same category that are part of AI groups
-          const candidateRequirements = existingRequirements.filter(existingReq => {
-            // Must be in same category
-            const existingCategory = existingReq.requirement_category || 'Okategoriserad';
-            if (existingCategory !== newReqCategory) return false;
-            
-            // Must have AI grouping information
-            return existingReq.group_id && existingReq.similarity_score && existingReq.similarity_score >= 80;
-          });
-
-          // Group candidates by their group_id and find groups with multiple members
-          const groupMap = new Map<string, typeof existingRequirements>();
-          candidateRequirements.forEach(req => {
-            const groupId = req.group_id!;
-            if (!groupMap.has(groupId)) {
-              groupMap.set(groupId, []);
+        // Build complete group map from all existing requirements (no pre-filtering)
+        const allGroupMap = new Map<string, typeof existingRequirements>();
+        existingRequirements.forEach(req => {
+          if (req.group_id) {
+            if (!allGroupMap.has(req.group_id)) {
+              allGroupMap.set(req.group_id, []);
             }
-            groupMap.get(groupId)!.push(req);
-          });
+            allGroupMap.get(req.group_id)!.push(req);
+          }
+        });
 
-          // Find groups with at least 2 members (meaningful AI groups)
-          const meaningfulGroups = Array.from(groupMap.entries()).filter(([_, members]) => members.length >= 2);
+        // Only consider groups with at least 2 members (meaningful AI groups)
+        const meaningfulGroups = new Map(Array.from(allGroupMap.entries())
+          .filter(([_, members]) => members.length >= 2));
+
+        // Case 1: Exact match - if match belongs to AI group, show ALL group members
+        if (isIdentical) {
+          const matchedGroupIds = matches
+            .filter(match => match.group_id)
+            .map(match => match.group_id!);
           
-          if (meaningfulGroups.length > 0) {
-            // For each meaningful group, check if any member is similar to newReq
-            for (const [groupId, members] of meaningfulGroups) {
-              const hasTextualSimilarity = members.some(member => {
-                const newText = newReq.text.toLowerCase();
-                const memberText = member.text.toLowerCase();
-                
-                // Simple similarity check: shared keywords and similar length
-                const newWords = new Set(newText.split(/\s+/).filter(w => w.length > 3));
-                const memberWords = new Set(memberText.split(/\s+/).filter(w => w.length > 3));
-                const intersection = new Set(Array.from(newWords).filter(w => memberWords.has(w)));
-                const similarity = intersection.size / Math.max(newWords.size, memberWords.size);
-                
-                return similarity > 0.3; // 30% word overlap threshold
-              });
-
-              if (hasTextualSimilarity) {
-                aiGroupedRequirements.push(...members);
+          let exactMatchGroupsFound = 0;
+          for (const groupId of matchedGroupIds) {
+            const groupMembers = meaningfulGroups.get(groupId);
+            if (groupMembers) {
+              // Add all group members regardless of category or similarity score
+              for (const member of groupMembers) {
+                if (!includedIds.has(member.id)) {
+                  aiGroupedRequirements.push(member);
+                  includedIds.add(member.id);
+                }
               }
+              exactMatchGroupsFound++;
+              console.log(`📎 Exact match found in AI group ${groupId}, added all ${groupMembers.length} group members`);
             }
+          }
+          
+          if (exactMatchGroupsFound > 0) {
+            console.log(`✅ Total exact match groups expanded: ${exactMatchGroupsFound}, total AI-grouped requirements: ${aiGroupedRequirements.length}`);
+          }
+        } else {
+          // Case 2: No exact match - check textual similarity with group representatives
+          const newReqCategory = newReq.categories[1] || newReq.categories[0] || 'Okategoriserad'; // Use preceding category first
+          let similarityGroupsFound = 0;
+          
+          for (const [groupId, members] of Array.from(meaningfulGroups)) {
+            // Check if any group member is in same category and has textual similarity
+            const hasRelevantMatch = members.some((member: any) => {
+              // Category check
+              const memberCategory = member.requirement_category || 'Okategoriserad';
+              if (memberCategory !== newReqCategory) return false;
+              
+              // Similarity score check (only use high-confidence groups)
+              if (!member.similarity_score || member.similarity_score < 80) return false;
+              
+              // Textual similarity check
+              const newText = newReq.text.toLowerCase();
+              const memberText = member.text.toLowerCase();
+              
+              const newWords = new Set(newText.split(/\s+/).filter((w: string) => w.length > 3));
+              const memberWords = new Set(memberText.split(/\s+/).filter((w: string) => w.length > 3));
+              const intersection = new Set(Array.from(newWords).filter(w => memberWords.has(w)));
+              const similarity = intersection.size / Math.max(newWords.size, memberWords.size);
+              
+              return similarity > 0.3; // 30% word overlap threshold
+            });
+
+            if (hasRelevantMatch) {
+              // Add ALL members of the group, not just the matching one
+              for (const member of members) {
+                if (!includedIds.has(member.id)) {
+                  aiGroupedRequirements.push(member);
+                  includedIds.add(member.id);
+                }
+              }
+              similarityGroupsFound++;
+              console.log(`🔍 Textual similarity found with AI group ${groupId}, added all ${members.length} group members`);
+            }
+          }
+          
+          if (similarityGroupsFound > 0) {
+            console.log(`✅ Total similarity groups expanded: ${similarityGroupsFound}, total AI-grouped requirements: ${aiGroupedRequirements.length}`);
           }
         }
 

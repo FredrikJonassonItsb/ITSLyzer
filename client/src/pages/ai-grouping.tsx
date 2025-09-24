@@ -4,8 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Brain, Play, CheckCircle, AlertCircle, Clock, FileText, Users, BarChart3 } from 'lucide-react';
+import { Brain, Play, CheckCircle, AlertCircle, Clock, FileText, Users, BarChart3, Trash2, RefreshCw } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { Requirement } from '@shared/schema';
+import { apiRequest } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
 
 interface GroupingResult {
   success: boolean;
@@ -22,9 +26,10 @@ export function AIGroupingPage() {
   const [groupingResult, setGroupingResult] = useState<GroupingResult | null>(null);
   
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   // Fetch requirements for grouping
-  const { data: requirements = [], isLoading } = useQuery({
+  const { data: requirements = [], isLoading } = useQuery<Requirement[]>({
     queryKey: ['/api/requirements/grouping'],
     enabled: true
   });
@@ -49,10 +54,57 @@ export function AIGroupingPage() {
       setIsGrouping(false);
       // Invalidate requirements cache to show updated groupings
       queryClient.invalidateQueries({ queryKey: ['/api/requirements'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/requirements/grouping'] });
+      toast({
+        title: "AI-gruppering slutförd",
+        description: data.message || "Krav har grupperats framgångsrikt",
+      });
     },
     onError: (error) => {
       console.error('AI grouping failed:', error);
       setIsGrouping(false);
+      toast({
+        title: "AI-gruppering misslyckades",
+        description: error instanceof Error ? error.message : "Ett okänt fel uppstod",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Clear groupings mutation
+  const clearGroupingsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/requirements/groupings/clear', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Kunde inte rensa grupperingar');
+      }
+      
+      return response.json();
+    },
+    onSuccess: (data: { success: boolean; message: string }) => {
+      // Reset local state
+      setGroupingResult(null);
+      // Invalidate caches to refresh data
+      queryClient.invalidateQueries({ queryKey: ['/api/requirements'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/requirements/grouping'] });
+      
+      toast({
+        title: "AI-grupperingar rensade",
+        description: data.message || "Alla AI-grupperingar har rensats",
+      });
+    },
+    onError: (error) => {
+      console.error('Clear groupings failed:', error);
+      toast({
+        title: "Rensning misslyckades",
+        description: error instanceof Error ? error.message : "Kunde inte rensa grupperingar",
+        variant: "destructive"
+      });
     }
   });
 
@@ -77,57 +129,124 @@ export function AIGroupingPage() {
       </div>
 
       {/* Current Status */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Tillgängliga krav</p>
-                <p className="text-2xl font-bold" data-testid="stat-available">
-                  {requirements.length}
-                </p>
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Tillgängliga krav</p>
+                  <p className="text-2xl font-bold" data-testid="stat-available">
+                    {requirements.length}
+                  </p>
+                </div>
+                <FileText className="h-8 w-8 text-muted-foreground" />
               </div>
-              <FileText className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Redo för AI-analys
-            </p>
-          </CardContent>
-        </Card>
+              <p className="text-xs text-muted-foreground mt-2">
+                Redo för AI-analys
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Redan grupperade</p>
-                <p className="text-2xl font-bold text-blue-600" data-testid="stat-grouped">
-                  {requirements.filter(req => req.group_id).length}
-                </p>
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Redan grupperade</p>
+                  <p className="text-2xl font-bold text-blue-600" data-testid="stat-grouped">
+                    {requirements.filter(req => req.group_id).length}
+                  </p>
+                </div>
+                <Users className="h-8 w-8 text-muted-foreground" />
               </div>
-              <Users className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Från tidigare körningar
-            </p>
-          </CardContent>
-        </Card>
+              <p className="text-xs text-muted-foreground mt-2">
+                Från tidigare körningar
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Ogrouperade</p>
-                <p className="text-2xl font-bold text-orange-600" data-testid="stat-ungrouped">
-                  {requirements.filter(req => !req.group_id).length}
-                </p>
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Ogrouperade</p>
+                  <p className="text-2xl font-bold text-orange-600" data-testid="stat-ungrouped">
+                    {requirements.filter(req => !req.group_id).length}
+                  </p>
+                </div>
+                <BarChart3 className="h-8 w-8 text-muted-foreground" />
               </div>
-              <BarChart3 className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Behöver analyseras
-            </p>
-          </CardContent>
-        </Card>
+              <p className="text-xs text-muted-foreground mt-2">
+                Behöver analyseras
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Reset groupings section */}
+        {requirements.filter(req => req.group_id).length > 0 && (
+          <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950 dark:border-orange-800">
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <h4 className="font-medium text-orange-900 dark:text-orange-100">
+                    Rensa befintliga AI-grupperingar
+                  </h4>
+                  <p className="text-sm text-orange-700 dark:text-orange-300">
+                    Ta bort alla nuvarande AI-grupperingar för att köra en ny gruppering med uppdaterade riktlinjer.
+                    Detta påverkar inte själva kraven, endast grupperingsinformationen.
+                  </p>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      disabled={clearGroupingsMutation.isPending}
+                      className="ml-4 bg-white hover:bg-orange-100 border-orange-300 text-orange-700 dark:bg-orange-900 dark:hover:bg-orange-800 dark:border-orange-600 dark:text-orange-200"
+                      data-testid="button-clear-groupings"
+                    >
+                      {clearGroupingsMutation.isPending ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          Rensar...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Rensa grupperingar
+                        </>
+                      )}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Rensa AI-grupperingar?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Detta kommer att ta bort alla befintliga AI-grupperingar för {requirements.filter(req => req.group_id).length} krav. 
+                        Själva kraven påverkas inte, men grupperingsinformationen försvinner permanent.
+                        <br /><br />
+                        Du kan sedan köra en ny AI-gruppering med uppdaterade riktlinjer.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel data-testid="cancel-clear-groupings">
+                        Avbryt
+                      </AlertDialogCancel>
+                      <AlertDialogAction 
+                        onClick={() => clearGroupingsMutation.mutate()}
+                        className="bg-red-600 hover:bg-red-700"
+                        data-testid="confirm-clear-groupings"
+                      >
+                        Ja, rensa grupperingar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* AI Grouping Section */}

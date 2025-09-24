@@ -143,6 +143,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Clear existing AI groupings endpoint
+  app.delete("/api/requirements/groupings/clear", async (req, res) => {
+    try {
+      console.log("🧹 Request to clear all AI groupings received");
+      
+      await storage.clearAllGroupings();
+      console.log("✅ All AI groupings cleared successfully");
+      
+      res.json({ 
+        success: true, 
+        message: "Alla AI-grupperingar har rensats" 
+      });
+    } catch (error) {
+      console.error("❌ Error clearing groupings:", error as Error);
+      res.status(500).json({ 
+        error: "Kunde inte rensa grupperingar", 
+        details: error instanceof Error ? error.message : 'Okänt fel' 
+      });
+    }
+  });
+
   app.get("/api/requirements/:id", async (req, res) => {
     try {
       const requirement = await storage.getRequirement(req.params.id);

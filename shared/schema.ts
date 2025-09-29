@@ -57,13 +57,30 @@ export const insertRequirementSchema = createInsertSchema(requirements);
 // Schema for filtering options
 export const filterSchema = z.object({
   searchQuery: z.string().optional(),
-  requirementTypes: z.array(z.enum(["Skall", "Bör", "all"])).optional(),
-  organizations: z.array(z.string()).optional(),
-  categories: z.array(z.string()).optional(),
-  dates: z.array(z.string()).optional(),
-  userStatus: z.array(z.enum(["OK", "Under utveckling", "Senare", "Granskas", "Godkänd", "Avvisad", "Behöver förtydligande", "all"])).optional(),
+  requirementTypes: z.union([
+    z.string().transform(val => [val]),
+    z.array(z.string())
+  ]).optional(),
+  organizations: z.union([
+    z.string().transform(val => [val]),
+    z.array(z.string())
+  ]).optional(),
+  categories: z.union([
+    z.string().transform(val => [val]),
+    z.array(z.string())
+  ]).optional(),
+  dates: z.union([
+    z.string().transform(val => [val]),
+    z.array(z.string())
+  ]).optional(),
+  userStatus: z.union([
+    z.string().transform(val => [val]),
+    z.array(z.string())
+  ]).optional(),
   showOnlyNew: z.coerce.boolean().optional(),
   showGrouped: z.coerce.boolean().optional(),
+  sheetCategory: z.string().optional(),
+  sectionCategory: z.string().optional(),
 });
 
 export type FilterOptions = z.infer<typeof filterSchema>;

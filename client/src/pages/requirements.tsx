@@ -9,8 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Filter, Download, Upload, Brain, BarChart3 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import type { FilterOptions, Requirement, PaginatedRequirements, PaginationOptions } from '@shared/schema';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { FilterOptions, Requirement, PaginatedRequirements, PaginationOptions, Statistics } from '@shared/schema';
 
 // Custom hook for debouncing values
 function useDebouncedValue<T>(value: T, delay: number): T {
@@ -30,12 +30,12 @@ function useDebouncedValue<T>(value: T, delay: number): T {
 }
 
 export function RequirementsPage() {
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrganizations, setSelectedOrganizations] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>(['all']);
   const [selectedStatus, setSelectedStatus] = useState<string[]>(['all']);
-  const [showOnlyNew, setShowOnlyNew] = useState(false);
   const [showGrouped, setShowGrouped] = useState(false);
   const [selectedSheetCategory, setSelectedSheetCategory] = useState<string>('all');
   const [selectedSectionCategory, setSelectedSectionCategory] = useState<string>('all');
@@ -45,28 +45,72 @@ export function RequirementsPage() {
   // Debounce search query to reduce API calls (400ms delay)
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 400);
 
-  // Fetch paginated requirements with filters (using debounced search)
-  const { data: paginatedData, isLoading, refetch } = useQuery<PaginatedRequirements>({
-    queryKey: ['/api/requirements/paginated', { 
+  // Check if any filters are active (excluding 'all' values)
+  const hasActiveFilters = useMemo(() => {
+    return debouncedSearchQuery.trim() !== '' ||
+           !selectedTypes.includes('all') ||
+           !selectedStatus.includes('all') ||
+           selectedOrganizations.length > 0 ||
+           selectedCategories.length > 0 ||
+           showGrouped ||
+           selectedSheetCategory !== 'all' ||
+           selectedSectionCategory !== 'all';
+  }, [debouncedSearchQuery, selectedTypes, selectedStatus, selectedOrganizations, selectedCategories, showGrouped, selectedSheetCategory, selectedSectionCategory]);
+
+  // Use non-paginated endpoint when filters are active to show ALL matching results
+  // Use paginated endpoint only when no filters are active for performance
+  const { data: allRequirements, isLoading: isLoadingAll } = useQuery<Requirement[]>({
+    queryKey: ['/api/requirements', { 
       searchQuery: debouncedSearchQuery,
       requirementTypes: selectedTypes,
       organizations: selectedOrganizations,
       categories: selectedCategories,
       userStatus: selectedStatus,
-      showOnlyNew,
       showGrouped,
+      sheetCategory: selectedSheetCategory,
+      sectionCategory: selectedSectionCategory,
+      sortBy: 'import_date',
+      sortOrder: 'desc'
+    }],
+    enabled: hasActiveFilters,
+    placeholderData: (previousData) => previousData,
+  });
+
+  const { data: paginatedData, isLoading: isLoadingPaginated } = useQuery<PaginatedRequirements>({
+    queryKey: ['/api/requirements/paginated', { 
       page: currentPage,
       limit: pageSize,
       sortBy: 'import_date',
       sortOrder: 'desc'
     }],
-    enabled: true,
-    placeholderData: (previousData) => previousData, // Keep previous data while loading
+    enabled: !hasActiveFilters,
+    placeholderData: (previousData) => previousData,
   });
 
-  const requirements = paginatedData?.requirements || [];
-  const totalRequirements = paginatedData?.total || 0;
-  const totalPages = paginatedData?.totalPages || 1;
+  // Fetch statistics for accurate totals
+  const { data: statistics } = useQuery<Statistics>({
+    queryKey: ['/api/statistics'],
+    staleTime: 30000, // Cache for 30 seconds
+  });
+
+  // Use appropriate data source based on whether filters are active
+  const requirements = hasActiveFilters ? (allRequirements || []) : (paginatedData?.requirements || []);
+  const totalRequirements = hasActiveFilters ? (allRequirements?.length || 0) : (paginatedData?.total || 0);
+  const totalPages = hasActiveFilters ? 1 : (paginatedData?.totalPages || 1);
+  const isLoading = hasActiveFilters ? isLoadingAll : isLoadingPaginated;
+
+  // Refetch function that works for both filtered and non-filtered states
+  const refetch = () => {
+    if (hasActiveFilters) {
+      // Refetch all requirements when filters are active
+      queryClient.invalidateQueries({ queryKey: ['/api/requirements'] });
+    } else {
+      // Refetch paginated data when no filters are active
+      queryClient.invalidateQueries({ queryKey: ['/api/requirements/paginated'] });
+    }
+    // Always refetch statistics to keep totals accurate
+    queryClient.invalidateQueries({ queryKey: ['/api/statistics'] });
+  };
 
   // Get unique values for filters
   const uniqueOrganizations = Array.from(new Set(
@@ -101,20 +145,14 @@ export function RequirementsPage() {
     setSelectedCategories([]);
     setSelectedTypes(['all']);
     setSelectedStatus(['all']);
-    setShowOnlyNew(false);
     setShowGrouped(false);
     setSelectedSheetCategory('all');
     setSelectedSectionCategory('all');
     setCurrentPage(1); // Reset page when clearing filters
   };
 
-  const filteredRequirements = requirements.filter(req => {
-    // Category filtering
-    if (selectedSheetCategory !== 'all' && req.categories?.[0] !== selectedSheetCategory) return false;
-    if (selectedSectionCategory !== 'all' && req.categories?.[1] !== selectedSectionCategory) return false;
-    
-    return true;
-  });
+  // All filtering is now handled by backend, no need for frontend filtering
+  const filteredRequirements = requirements;
 
   const getCategoryCount = (categoryType: 'sheet' | 'section', category: string) => {
     if (category === 'all') return requirements.length;
@@ -165,7 +203,7 @@ export function RequirementsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Totalt krav</p>
                 <p className="text-2xl font-bold" data-testid="stat-total">
-                  {requirements.length}
+                  {hasActiveFilters ? requirements.length : (statistics?.totalRequirements || 0)}
                 </p>
               </div>
               <BarChart3 className="h-8 w-8 text-muted-foreground" />
@@ -179,7 +217,10 @@ export function RequirementsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Skall-krav</p>
                 <p className="text-2xl font-bold text-red-600" data-testid="stat-must">
-                  {requirements.filter(req => req.requirement_type === 'Skall').length}
+                  {hasActiveFilters 
+                    ? requirements.filter(req => req.requirement_type === 'Skall').length
+                    : (statistics?.mustRequirements || 0)
+                  }
                 </p>
               </div>
               <Badge variant="destructive" className="text-xs">SKALL</Badge>
@@ -193,7 +234,10 @@ export function RequirementsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Bör-krav</p>
                 <p className="text-2xl font-bold text-yellow-600" data-testid="stat-should">
-                  {requirements.filter(req => req.requirement_type === 'Bör').length}
+                  {hasActiveFilters 
+                    ? requirements.filter(req => req.requirement_type === 'Bör').length
+                    : (statistics?.shouldRequirements || 0)
+                  }
                 </p>
               </div>
               <Badge variant="secondary" className="text-xs">BÖR</Badge>
@@ -207,7 +251,10 @@ export function RequirementsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Grupperade</p>
                 <p className="text-2xl font-bold text-blue-600" data-testid="stat-grouped">
-                  {requirements.filter(req => req.group_id).length}
+                  {hasActiveFilters 
+                    ? requirements.filter(req => req.group_id).length
+                    : (statistics?.groups || 0)
+                  }
                 </p>
               </div>
               <Brain className="h-8 w-8 text-muted-foreground" />
@@ -334,18 +381,6 @@ export function RequirementsPage() {
 
           {/* Checkboxes */}
           <div className="flex items-center gap-6">
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="showOnlyNew" 
-                checked={showOnlyNew}
-                onCheckedChange={(checked) => setShowOnlyNew(checked as boolean)}
-                data-testid="checkbox-only-new"
-              />
-              <label htmlFor="showOnlyNew" className="text-sm">
-                Visa endast nya krav
-              </label>
-            </div>
-            
             <div className="flex items-center space-x-2">
               <Checkbox 
                 id="showGrouped" 

@@ -84,7 +84,8 @@ export class DatabaseStorage implements IStorage {
       }
       
       if (filters.requirementTypes && filters.requirementTypes.length > 0 && !filters.requirementTypes.includes('all')) {
-        conditions.push(inArray(requirements.requirement_type, filters.requirementTypes.filter(type => type !== 'all')));
+        const filteredTypes = filters.requirementTypes.filter(type => type !== 'all');
+        conditions.push(inArray(requirements.requirement_type, filteredTypes));
       }
       
       if (filters.organizations && filters.organizations.length > 0) {
@@ -121,6 +122,16 @@ export class DatabaseStorage implements IStorage {
       
       if (filters.showOnlyNew) {
         conditions.push(eq(requirements.is_new, true));
+      }
+      
+      // Handle sheet category filtering (first category level)
+      if (filters.sheetCategory && filters.sheetCategory !== 'all') {
+        conditions.push(sql`${requirements.categories}::jsonb->0 = ${filters.sheetCategory}::text`);
+      }
+      
+      // Handle section category filtering (second category level)
+      if (filters.sectionCategory && filters.sectionCategory !== 'all') {
+        conditions.push(sql`${requirements.categories}::jsonb->1 = ${filters.sectionCategory}::text`);
       }
       
       if (conditions.length > 0) {
@@ -197,6 +208,16 @@ export class DatabaseStorage implements IStorage {
       
       if (filters.showOnlyNew) {
         conditions.push(eq(requirements.is_new, true));
+      }
+      
+      // Handle sheet category filtering (first category level)
+      if (filters.sheetCategory && filters.sheetCategory !== 'all') {
+        conditions.push(sql`${requirements.categories}::jsonb->0 = ${filters.sheetCategory}::text`);
+      }
+      
+      // Handle section category filtering (second category level)
+      if (filters.sectionCategory && filters.sectionCategory !== 'all') {
+        conditions.push(sql`${requirements.categories}::jsonb->1 = ${filters.sectionCategory}::text`);
       }
       
       if (conditions.length > 0) {

@@ -220,11 +220,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Clear ungrouped requirements
       console.log("🔄 Processing ungrouped requirements...");
+      broadcastProgress("🔄 Bearbetar ogrouperade krav...", 'progress');
       for (const ungroupedId of groupingResult.ungroupedRequirements) {
         await storage.clearRequirementGrouping(ungroupedId);
       }
 
       console.log(`✅ Manual AI grouping completed: ${groupingResult.groups.length} groups, ${updatedCount} requirements updated`);
+      broadcastProgress(`✅ AI-gruppering slutförd: ${groupingResult.groups.length} grupper, ${updatedCount} krav uppdaterade`, 'success');
 
       const response = {
         success: true,
@@ -235,11 +237,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       console.log("📤 Sending grouping response:", response);
+      broadcastProgress("🎉 AI-gruppering komplett! Resultaten är nu tillgängliga.", 'complete');
       res.json(response);
 
     } catch (error) {
       console.error("❌ Error performing AI grouping:", error);
       console.error("Stack trace:", error instanceof Error ? error.stack : 'No stack trace');
+      
+      broadcastProgress(`❌ AI-gruppering misslyckades: ${error instanceof Error ? error.message : 'Okänt fel'}`, 'error');
       
       res.status(500).json({ 
         error: "Kunde inte genomföra AI-gruppering", 

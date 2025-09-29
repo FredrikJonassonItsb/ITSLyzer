@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Requirement } from '@shared/schema';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { ProgressLog } from '@/components/progress-log';
 
 interface GroupingResult {
   success: boolean;
@@ -302,9 +303,14 @@ export function AIGroupingPage() {
                   <div className="bg-primary h-2 rounded-full animate-pulse" style={{width: '60%'}}></div>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground">
-                AI:n läser igenom alla krav och identifierar mönster och likheter...
-              </p>
+              <ProgressLog 
+                isGrouping={isGrouping} 
+                onComplete={() => {
+                  // Force refresh queries after progress completes
+                  queryClient.invalidateQueries({ queryKey: ['/api/requirements'] });
+                  queryClient.invalidateQueries({ queryKey: ['/api/requirements/grouping'] });
+                }}
+              />
             </div>
           )}
 

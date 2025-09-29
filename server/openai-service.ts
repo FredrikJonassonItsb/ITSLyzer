@@ -221,7 +221,7 @@ VAR MYCKET SELEKTIV - Hellre för få grupper än för många. Lämna krav ogrup
       let response;
       try {
         response = await openai.chat.completions.create({
-          model: "gpt-4o",
+          model: "gpt-5-nano",
           messages: [
             {
               role: "system",
@@ -316,7 +316,7 @@ Svara endast med kategorins namn (max 3 ord).`;
       let response;
       try {
         response = await openai.chat.completions.create({
-          model: "gpt-4o",
+          model: "gpt-5-nano",
           messages: [
             {
               role: "system",
@@ -368,7 +368,7 @@ Skapa en sammanfattning på 2-3 meningar om grupperingsresultatet och dess nytta
       let response;
       try {
         response = await openai.chat.completions.create({
-          model: "gpt-4o",
+          model: "gpt-5-nano",
           messages: [
             {
               role: "system", 

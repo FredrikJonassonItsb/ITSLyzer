@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useRef, useMemo } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,10 +9,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ChevronDown, ChevronRight, Users, Calendar, Building, MessageSquare, CheckCircle, AlertCircle, Clock, Trash2, Brain, FileText, Tag } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { Requirement } from '@shared/schema';
+import type { Requirement, LeanRequirement } from '@shared/schema';
 
 interface RequirementsTableProps {
-  requirements: Requirement[];
+  requirements: LeanRequirement[];
   isLoading?: boolean;
   onRefresh?: () => void;
 }
@@ -28,7 +29,7 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
 
   // Update requirement mutation
   const updateMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Requirement> }) => {
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<LeanRequirement> }) => {
       const response = await fetch(`/api/requirements/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -42,7 +43,9 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
       return response.json();
     },
     onSuccess: () => {
+      // Invalidate both paginated and non-paginated endpoints
       queryClient.invalidateQueries({ queryKey: ['/api/requirements'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/requirements/paginated'] });
       onRefresh?.();
     }
   });
@@ -61,7 +64,9 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
       return response.json();
     },
     onSuccess: () => {
+      // Invalidate both paginated and non-paginated endpoints
       queryClient.invalidateQueries({ queryKey: ['/api/requirements'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/requirements/paginated'] });
       onRefresh?.();
     }
   });
@@ -86,7 +91,7 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
     setExpandedGroups(newExpanded);
   };
 
-  const startEditComment = (req: Requirement) => {
+  const startEditComment = (req: LeanRequirement) => {
     setEditingComment(req.id);
     setCommentText(req.user_comment || '');
   };
@@ -105,7 +110,7 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
     setCommentText('');
   };
 
-  const startEditStatus = (req: Requirement) => {
+  const startEditStatus = (req: LeanRequirement) => {
     setEditingStatus(req.id);
     setStatusValue(req.user_status || 'OK');
   };
@@ -135,10 +140,10 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
     return type === 'Skall' ? 'destructive' : 'secondary';
   };
 
-  // Gruppera krav efter group_id
-  const groupedRequirements = () => {
-    const groups = new Map<string, Requirement[]>();
-    const ungrouped: Requirement[] = [];
+  // Organisera kraven i grupper med useMemo för konsistent hook-ordning (måste vara före early returns)
+  const { groups, ungrouped } = useMemo(() => {
+    const groups = new Map<string, LeanRequirement[]>();
+    const ungrouped: LeanRequirement[] = [];
 
     requirements.forEach(req => {
       if (req.group_id) {
@@ -152,10 +157,56 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
     });
 
     return { groups, ungrouped };
-  };
+  }, [requirements]);
+
+  // ALLA HOOKS måste vara före early returns - flytta virtualization hooks hit
+  const virtualItems = useMemo(() => {
+    const items: Array<{ type: 'group'; groupId: string; requirements: LeanRequirement[] } | { type: 'requirement'; requirement: LeanRequirement; isUngrouped?: boolean }> = [];
+    
+    // Add grouped requirements
+    Array.from(groups.entries()).forEach(([groupId, groupRequirements]) => {
+      items.push({ type: 'group', groupId, requirements: groupRequirements });
+      
+      // Only add individual requirements if group is expanded
+      if (expandedGroups.has(groupId)) {
+        groupRequirements.forEach(req => {
+          items.push({ type: 'requirement', requirement: req });
+        });
+      }
+    });
+    
+    // Add ungrouped header if there are ungrouped requirements
+    if (ungrouped.length > 0) {
+      items.push({ 
+        type: 'group', 
+        groupId: 'ungrouped', 
+        requirements: ungrouped 
+      });
+      
+      // Add individual ungrouped requirements
+      ungrouped.forEach(req => {
+        items.push({ type: 'requirement', requirement: req, isUngrouped: true });
+      });
+    }
+    
+    return items;
+  }, [groups, ungrouped, expandedGroups]);
+
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: virtualItems.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: (index) => {
+      const item = virtualItems[index];
+      if (item?.type === 'group') {
+        return 100; // Group header height
+      }
+      return 200; // Individual requirement card height
+    },
+  });
 
   // Hitta representativ text för en grupp (mest vanliga eller från group_representative)
-  const getGroupRepresentativeText = (groupRequirements: Requirement[]) => {
+  const getGroupRepresentativeText = (groupRequirements: LeanRequirement[]) => {
     // Först, försök hitta den som är markerad som group_representative
     const representative = groupRequirements.find(req => req.group_representative);
     if (representative) {
@@ -167,7 +218,7 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
   };
 
   // Räkna statistik för en grupp
-  const getGroupStats = (groupRequirements: Requirement[]) => {
+  const getGroupStats = (groupRequirements: LeanRequirement[]) => {
     const totalReqs = groupRequirements.length;
     const mustReqs = groupRequirements.filter(req => req.requirement_type === 'Skall').length;
     const shouldReqs = groupRequirements.filter(req => req.requirement_type === 'Bör').length;
@@ -196,11 +247,9 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
     );
   }
 
-  // Organisera kraven i grupper
-  const { groups, ungrouped } = groupedRequirements();
 
   // Funktion för att rendera individuella krav
-  const renderRequirement = (req: Requirement) => (
+  const renderRequirement = (req: LeanRequirement) => (
     <Card key={req.id} className="relative">
       <CardContent className="p-0">
         <div className="p-4">
@@ -498,87 +547,11 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
     </Card>
   );
 
-  return (
-    <div className="space-y-6">
-      {/* AI-grupperade krav */}
-      {Array.from(groups.entries()).map(([groupId, groupRequirements]) => {
-        const representativeText = getGroupRepresentativeText(groupRequirements);
-        const stats = getGroupStats(groupRequirements);
-        const isExpanded = expandedGroups.has(groupId);
-        
-        return (
-          <Card key={groupId} className="relative border-l-4 border-l-blue-500">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3 flex-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleGroupExpanded(groupId)}
-                    className="mt-1 p-1 h-6 w-6"
-                    data-testid={`button-expand-group-${groupId}`}
-                  >
-                    {isExpanded ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
-                  </Button>
-                  
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Brain className="h-4 w-4 text-blue-600" />
-                      <CardTitle className="text-base">
-                        AI-Grupp {groupId.slice(-4)}
-                      </CardTitle>
-                      <Badge variant="outline" className="text-xs">
-                        {stats.totalReqs} krav
-                      </Badge>
-                    </div>
-                    
-                    {/* Representativ text */}
-                    <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-                      {representativeText}
-                    </p>
-                    
-                    {/* Grupp-statistik */}
-                    <div className="flex items-center flex-wrap gap-2">
-                      {stats.mustReqs > 0 && (
-                        <Badge variant="destructive" className="text-xs">
-                          {stats.mustReqs} Skall
-                        </Badge>
-                      )}
-                      {stats.shouldReqs > 0 && (
-                        <Badge variant="secondary" className="text-xs">
-                          {stats.shouldReqs} Bör
-                        </Badge>
-                      )}
-                      {stats.newReqs > 0 && (
-                        <Badge variant="outline" className="text-xs text-green-600">
-                          {stats.newReqs} Nya
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardHeader>
-            
-            <Collapsible open={isExpanded}>
-              <CollapsibleContent>
-                <CardContent className="pt-0">
-                  <div className="space-y-4">
-                    {groupRequirements.map(req => renderRequirement(req))}
-                  </div>
-                </CardContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </Card>
-        );
-      })}
 
-      {/* Ej grupperade krav */}
-      {ungrouped.length > 0 && (
+  const renderVirtualItem = (item: typeof virtualItems[0]) => {
+    if (item.type === 'group' && item.groupId === 'ungrouped') {
+      // Render ungrouped header
+      return (
         <Card className="relative border-l-4 border-l-gray-400">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
@@ -589,14 +562,109 @@ export function RequirementsTable({ requirements, isLoading, onRefresh }: Requir
               </Badge>
             </div>
           </CardHeader>
-          
-          <CardContent className="pt-0">
-            <div className="space-y-4">
-              {ungrouped.map(req => renderRequirement(req))}
-            </div>
-          </CardContent>
         </Card>
-      )}
+      );
+    }
+    
+    if (item.type === 'group') {
+      // Render AI group header
+      const representativeText = getGroupRepresentativeText(item.requirements);
+      const stats = getGroupStats(item.requirements);
+      const isExpanded = expandedGroups.has(item.groupId);
+      
+      return (
+        <Card className="relative border-l-4 border-l-blue-500">
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-3 flex-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleGroupExpanded(item.groupId)}
+                  className="mt-1 p-1 h-6 w-6"
+                  data-testid={`button-expand-group-${item.groupId}`}
+                >
+                  {isExpanded ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </Button>
+                
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Brain className="h-4 w-4 text-blue-600" />
+                    <CardTitle className="text-base">
+                      AI-Grupp {item.groupId.slice(-4)}
+                    </CardTitle>
+                    <Badge variant="outline" className="text-xs">
+                      {stats.totalReqs} krav
+                    </Badge>
+                  </div>
+                  
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+                    {representativeText}
+                  </p>
+                  
+                  <div className="flex items-center flex-wrap gap-2">
+                    {stats.mustReqs > 0 && (
+                      <Badge variant="destructive" className="text-xs">
+                        {stats.mustReqs} Skall
+                      </Badge>
+                    )}
+                    {stats.shouldReqs > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {stats.shouldReqs} Bör
+                      </Badge>
+                    )}
+                    {stats.newReqs > 0 && (
+                      <Badge variant="outline" className="text-xs text-green-600">
+                        {stats.newReqs} Nya
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+      );
+    }
+    
+    // Render individual requirement
+    return renderRequirement(item.requirement);
+  };
+
+  return (
+    <div
+      ref={parentRef}
+      className="h-[600px] overflow-auto"
+      style={{ contain: 'strict' }}
+    >
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {virtualizer.getVirtualItems().map((virtualItem) => (
+          <div
+            key={virtualItem.key}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              transform: `translateY(${virtualItem.start}px)`,
+            }}
+          >
+            <div className="mb-6">
+              {renderVirtualItem(virtualItems[virtualItem.index])}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

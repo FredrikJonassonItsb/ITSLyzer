@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, json } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, json, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -38,7 +38,16 @@ export const requirements = pgTable("requirements", {
   import_date: text("import_date"),                           // Import date
   requirement_type: text("requirement_type"),                 // "Skall" eller "Bör"
   requirement_category: text("requirement_category")          // Category from Excel headers
-});
+}, (table) => ({
+  // B-tree indexes for common filter columns to improve query performance
+  reqTypeIdx: index("req_type_idx").on(table.requirement_type),
+  userStatusIdx: index("user_status_idx").on(table.user_status),
+  groupIdIdx: index("group_id_idx").on(table.group_id),
+  importDateIdx: index("import_date_idx").on(table.import_date),
+  importOrgIdx: index("import_org_idx").on(table.import_organization),
+  // Text search index for requirement text  
+  textSearchIdx: index("text_search_idx").on(table.text),
+}));
 
 export type Requirement = typeof requirements.$inferSelect;
 export type InsertRequirement = typeof requirements.$inferInsert;
@@ -53,8 +62,8 @@ export const filterSchema = z.object({
   categories: z.array(z.string()).optional(),
   dates: z.array(z.string()).optional(),
   userStatus: z.array(z.enum(["OK", "Under utveckling", "Senare", "Granskas", "Godkänd", "Avvisad", "Behöver förtydligande", "all"])).optional(),
-  showOnlyNew: z.boolean().optional(),
-  showGrouped: z.boolean().optional(),
+  showOnlyNew: z.coerce.boolean().optional(),
+  showGrouped: z.coerce.boolean().optional(),
 });
 
 export type FilterOptions = z.infer<typeof filterSchema>;

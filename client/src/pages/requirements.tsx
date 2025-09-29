@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { RequirementsTable } from '@/components/requirements-table';
 import { CreateRequirementDialog } from '@/components/create-requirement-dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +10,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Filter, Download, Upload, Brain, BarChart3 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import type { FilterOptions, Requirement } from '@shared/schema';
+import type { FilterOptions, Requirement, PaginatedRequirements, PaginationOptions } from '@shared/schema';
+
+// Custom hook for debouncing values
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 export function RequirementsPage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -22,20 +39,34 @@ export function RequirementsPage() {
   const [showGrouped, setShowGrouped] = useState(false);
   const [selectedSheetCategory, setSelectedSheetCategory] = useState<string>('all');
   const [selectedSectionCategory, setSelectedSectionCategory] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(50); // Fixed page size for performance
 
-  // Fetch requirements with filters
-  const { data: requirements = [], isLoading, refetch } = useQuery<Requirement[]>({
-    queryKey: ['/api/requirements', { 
-      searchQuery, 
+  // Debounce search query to reduce API calls (400ms delay)
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 400);
+
+  // Fetch paginated requirements with filters (using debounced search)
+  const { data: paginatedData, isLoading, refetch } = useQuery<PaginatedRequirements>({
+    queryKey: ['/api/requirements/paginated', { 
+      searchQuery: debouncedSearchQuery,
       requirementTypes: selectedTypes,
       organizations: selectedOrganizations,
       categories: selectedCategories,
       userStatus: selectedStatus,
       showOnlyNew,
-      showGrouped 
+      showGrouped,
+      page: currentPage,
+      limit: pageSize,
+      sortBy: 'import_date',
+      sortOrder: 'desc'
     }],
-    enabled: true
+    enabled: true,
+    placeholderData: (previousData) => previousData, // Keep previous data while loading
   });
+
+  const requirements = paginatedData?.requirements || [];
+  const totalRequirements = paginatedData?.total || 0;
+  const totalPages = paginatedData?.totalPages || 1;
 
   // Get unique values for filters
   const uniqueOrganizations = Array.from(new Set(
@@ -74,6 +105,7 @@ export function RequirementsPage() {
     setShowGrouped(false);
     setSelectedSheetCategory('all');
     setSelectedSectionCategory('all');
+    setCurrentPage(1); // Reset page when clearing filters
   };
 
   const filteredRequirements = requirements.filter(req => {

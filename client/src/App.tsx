@@ -6,25 +6,46 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
-import HomePage from "@/pages/home";
-import ImportPage from "@/pages/import";
-import RequirementsPage from "@/pages/requirements";
-import ComparePage from "@/pages/compare";
-import AIGroupingPage from "@/pages/ai-grouping";
-import StatisticsPage from "@/pages/statistics";
-import NotFound from "@/pages/not-found";
+import { Suspense, lazy } from "react";
+
+// Lazy load all pages for better performance
+const HomePage = lazy(() => import("@/pages/home"));
+const ImportPage = lazy(() => import("@/pages/import"));
+const RequirementsPage = lazy(() => import("@/pages/requirements"));
+const ComparePage = lazy(() => import("@/pages/compare"));
+const AIGroupingPage = lazy(() => import("@/pages/ai-grouping"));
+const StatisticsPage = lazy(() => import("@/pages/statistics"));
+const NotFound = lazy(() => import("@/pages/not-found"));
+
+// Loading component for suspense fallback
+function PageLoadingSkeleton() {
+  return (
+    <div className="p-6 max-w-7xl mx-auto space-y-6 animate-pulse">
+      <div className="h-8 bg-muted rounded w-64"></div>
+      <div className="h-4 bg-muted rounded w-96"></div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="h-24 bg-muted rounded"></div>
+        ))}
+      </div>
+      <div className="h-64 bg-muted rounded"></div>
+    </div>
+  );
+}
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={HomePage} />
-      <Route path="/import" component={ImportPage} />
-      <Route path="/requirements" component={RequirementsPage} />
-      <Route path="/compare" component={ComparePage} />
-      <Route path="/ai-grouping" component={AIGroupingPage} />
-      <Route path="/statistics" component={StatisticsPage} />
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<PageLoadingSkeleton />}>
+      <Switch>
+        <Route path="/" component={HomePage} />
+        <Route path="/import" component={ImportPage} />
+        <Route path="/requirements" component={RequirementsPage} />
+        <Route path="/compare" component={ComparePage} />
+        <Route path="/ai-grouping" component={AIGroupingPage} />
+        <Route path="/statistics" component={StatisticsPage} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 

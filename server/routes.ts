@@ -58,6 +58,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // AI Grouping API - MUST BE BEFORE /:id route to avoid conflicts
+  app.get("/api/requirements/grouping", async (req, res) => {
+    try {
+      const requirements = await storage.getRequirementsForGrouping();
+      res.json(requirements);
+    } catch (error) {
+      console.error("Error fetching requirements for grouping:", error);
+      res.status(500).json({ error: "Kunde inte hämta krav för gruppering" });
+    }
+  });
+
   // Single requirement detail API
   app.get("/api/requirements/:id", async (req, res) => {
     try {
@@ -69,17 +80,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching requirement:", error);
       res.status(500).json({ error: "Kunde inte hämta kravet" });
-    }
-  });
-
-  // AI Grouping API - MUST BE BEFORE /:id route to avoid conflicts
-  app.get("/api/requirements/grouping", async (req, res) => {
-    try {
-      const requirements = await storage.getRequirementsForGrouping();
-      res.json(requirements);
-    } catch (error) {
-      console.error("Error fetching requirements for grouping:", error);
-      res.status(500).json({ error: "Kunde inte hämta krav för gruppering" });
     }
   });
 

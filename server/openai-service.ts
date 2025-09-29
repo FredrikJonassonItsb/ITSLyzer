@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { Requirement, RequirementGroup } from "@shared/schema";
+import { categoryMappingService } from "./category-mapping-service";
 
 // Using reliable OpenAI model for Swedish requirement analysis
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -23,14 +24,21 @@ export class OpenAIService {
       return { groups: [], ungroupedRequirements: [] };
     }
 
-    // First group requirements by category
+    // First group requirements by category with standardization
     const categoryGroups = new Map<string, Requirement[]>();
+    
+    // Batch map all unique categories upfront for efficiency
+    const uniqueCategories = Array.from(new Set(requirements.map(req => req.requirement_category)));
+    const categoryMapping = await categoryMappingService.mapCategories(uniqueCategories);
+    
     requirements.forEach(req => {
-      const category = req.requirement_category || 'Okategoriserad';
-      if (!categoryGroups.has(category)) {
-        categoryGroups.set(category, []);
+      const rawCategory = req.requirement_category || 'Okategoriserad';
+      const mappedCategory = categoryMapping.get(rawCategory) || rawCategory;
+      
+      if (!categoryGroups.has(mappedCategory)) {
+        categoryGroups.set(mappedCategory, []);
       }
-      categoryGroups.get(category)!.push(req);
+      categoryGroups.get(mappedCategory)!.push(req);
     });
 
     const allGroups: RequirementGroup[] = [];

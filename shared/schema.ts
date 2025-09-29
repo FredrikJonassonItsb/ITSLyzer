@@ -179,6 +179,22 @@ export const requirementGroupSchema = z.object({
 
 export type RequirementGroup = z.infer<typeof requirementGroupSchema>;
 
+// Category mappings table for standardizing category names
+export const categoryMappings = pgTable("category_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  source_category: text("source_category").notNull().unique(),
+  target_category: text("target_category").notNull(),
+  created_at: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  sourceCategoryIdx: index("source_category_idx").on(table.source_category),
+  targetCategoryIdx: index("target_category_idx").on(table.target_category),
+}));
+
+export type CategoryMapping = typeof categoryMappings.$inferSelect;
+export type InsertCategoryMapping = typeof categoryMappings.$inferInsert;
+
+export const insertCategoryMappingSchema = createInsertSchema(categoryMappings);
+
 // Export filter and upload schemas for forms
 export const uploadExcelSchema = z.object({
   organization: z.string().min(1, "Organisation måste anges"),

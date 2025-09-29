@@ -8,6 +8,7 @@ import { z } from "zod";
 import { uploadExcelSchema, filterSchema, paginationSchema, type InsertRequirement } from "@shared/schema";
 import { generateRequirementKey } from "@shared/generateRequirementKey";
 import { randomUUID } from "crypto";
+import { categoryMappingService } from "./category-mapping-service";
 
 // Configure multer for file upload
 const upload = multer({ 
@@ -705,11 +706,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Create dual categories: Sheet name + Preceding text
         const sheetCategory = enrichedRow.sheetName;
-        const precedingCategory = precedingCategoryText || 'Okategoriserad';
+        const precedingCategoryRaw = precedingCategoryText || 'Okategoriserad';
+        
+        // Map the category to standardized version
+        const precedingCategory = await categoryMappingService.mapCategory(precedingCategoryRaw);
         
         console.log(`✅ Valid requirement found with dual categories: 
           - Sheet: "${sheetCategory}"
-          - Preceding: "${precedingCategory}"
+          - Preceding: "${precedingCategoryRaw}" → "${precedingCategory}" (mapped)
           - Text: ${requirementText.substring(0, 100)}...`);
 
         // Apply changes from comparison if available - using stable requirement key

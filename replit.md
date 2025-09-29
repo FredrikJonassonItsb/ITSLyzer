@@ -27,6 +27,7 @@ Preferred communication style: Simple, everyday language.
 - **Database Access**: Drizzle ORM for type-safe database operations with PostgreSQL
 - **File Processing**: Multer middleware for file uploads and XLSX (SheetJS) for Excel file parsing
 - **API Design**: RESTful API with proper error handling and request logging middleware
+- **Category Mapping Service**: Intelligent category standardization with database mappings, AI fallback for unknown categories, and automatic learning
 
 ### Database Design
 - **Primary Storage**: PostgreSQL database with JSON fields for flexible requirement metadata
@@ -36,6 +37,7 @@ Preferred communication style: Simple, everyday language.
   - AI grouping fields (group_id, group_representative, similarity_score)
   - User interaction tracking (comments, status, historical data)
   - Import metadata (organization, dates, procurement tracking)
+  - Category mappings table for standardizing category names across imports
 
 ### AI Integration
 - **Service**: OpenAI integration using GPT-5 for requirement analysis and grouping

@@ -1,6 +1,6 @@
-import { type Requirement, type InsertRequirement, type FilterOptions, type Statistics, type PaginationOptions, type LeanRequirement, type PaginatedRequirements } from "@shared/schema";
+import { type Requirement, type InsertRequirement, type FilterOptions, type Statistics, type PaginationOptions, type LeanRequirement, type PaginatedRequirements, type CategoryMapping, type InsertCategoryMapping } from "@shared/schema";
 import { db } from "./db";
-import { requirements } from "@shared/schema";
+import { requirements, categoryMappings } from "@shared/schema";
 import { eq, like, and, inArray, sql, count, or, isNotNull, desc, asc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
@@ -65,6 +65,12 @@ export interface IStorage {
   // AI Grouping support
   getRequirementsForGrouping(): Promise<Requirement[]>;
   updateRequirementGroup(id: string, groupId: string, isRepresentative: boolean): Promise<void>;
+  
+  // Category Mapping
+  getCategoryMapping(sourceCategory: string): Promise<CategoryMapping | undefined>;
+  getAllCategoryMappings(): Promise<CategoryMapping[]>;
+  createCategoryMapping(mapping: InsertCategoryMapping): Promise<CategoryMapping>;
+  updateCategoryMapping(sourceCategory: string, targetCategory: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -511,6 +517,33 @@ export class DatabaseStorage implements IStorage {
     
     // Invalidate statistics cache after clearing requirement grouping
     statisticsCache.invalidate('statistics');
+  }
+
+  async getCategoryMapping(sourceCategory: string): Promise<CategoryMapping | undefined> {
+    const [mapping] = await db
+      .select()
+      .from(categoryMappings)
+      .where(eq(categoryMappings.source_category, sourceCategory));
+    return mapping || undefined;
+  }
+
+  async getAllCategoryMappings(): Promise<CategoryMapping[]> {
+    return await db.select().from(categoryMappings);
+  }
+
+  async createCategoryMapping(mapping: InsertCategoryMapping): Promise<CategoryMapping> {
+    const [created] = await db
+      .insert(categoryMappings)
+      .values(mapping)
+      .returning();
+    return created;
+  }
+
+  async updateCategoryMapping(sourceCategory: string, targetCategory: string): Promise<void> {
+    await db
+      .update(categoryMappings)
+      .set({ target_category: targetCategory })
+      .where(eq(categoryMappings.source_category, sourceCategory));
   }
 }
 

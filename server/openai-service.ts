@@ -53,7 +53,7 @@ export class OpenAIService {
     for (const [category, categoryRequirements] of Array.from(categoryGroups.entries())) {
       console.log(`🏷️ Processing category: ${category} (${categoryRequirements.length} requirements)`);
       progressCallback?.(`🏷️ Analyserar kategori: ${category} (${categoryRequirements.length} krav)`, 'progress', processedCategories + 1, totalCategories);
-      
+
       // Skip categories with less than 2 requirements (can't group)
       if (categoryRequirements.length < 2) {
         ungroupedRequirements.push(...categoryRequirements.map(req => req.id));
@@ -62,33 +62,17 @@ export class OpenAIService {
         continue;
       }
 
-      // Process category in smaller batches for better quality
-      const BATCH_SIZE = 20; // Smaller batches for higher quality within categories
-      const totalBatches = Math.ceil(categoryRequirements.length / BATCH_SIZE);
-      
-      for (let i = 0; i < categoryRequirements.length; i += BATCH_SIZE) {
-        const batch = categoryRequirements.slice(i, i + BATCH_SIZE);
-        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
-        
-        // Skip batches with less than 2 requirements
-        if (batch.length < 2) {
-          ungroupedRequirements.push(...batch.map(req => req.id));
-          continue;
-        }
+      // Perform a single AI call per category with retry handling
+      const categoryResult = await this.groupCategoryWithRetry(category, categoryRequirements, progressCallback);
 
-        progressCallback?.(`🤖 AI-analyserar batch ${batchNumber}/${totalBatches} i kategori "${category}"`, 'progress');
-        const batchResult = await this.groupRequirementsBatchWithRetry(batch, progressCallback);
-        
-        // Generate unique group IDs for this batch
-        batchResult.groups.forEach(group => {
-          group.groupId = this.generateUniqueGroupId();
-          group.category = category; // Ensure category is preserved
-        });
-        
-        allGroups.push(...batchResult.groups);
-        ungroupedRequirements.push(...batchResult.ungroupedRequirements);
-      }
-      
+      categoryResult.groups.forEach(group => {
+        group.groupId = this.generateUniqueGroupId();
+        group.category = category; // Ensure category is preserved
+      });
+
+      allGroups.push(...categoryResult.groups);
+      ungroupedRequirements.push(...categoryResult.ungroupedRequirements);
+
       processedCategories++;
     }
 
@@ -97,33 +81,39 @@ export class OpenAIService {
     return { groups: allGroups, ungroupedRequirements };
   }
 
-  private async groupRequirementsBatchWithRetry(requirements: Requirement[], progressCallback?: (message: string, type?: string, step?: number, total?: number) => void, maxRetries: number = 2): Promise<GroupingResult> {
+  private async groupCategoryWithRetry(
+    category: string,
+    requirements: Requirement[],
+    progressCallback?: (message: string, type?: string, step?: number, total?: number) => void,
+    maxRetries: number = 2
+  ): Promise<GroupingResult> {
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`Attempting AI grouping (attempt ${attempt}/${maxRetries}) for ${requirements.length} requirements...`);
+        console.log(`Attempting AI grouping (attempt ${attempt}/${maxRetries}) for category "${category}" with ${requirements.length} requirements...`);
         if (attempt > 1) {
-          progressCallback?.(`🔄 Försök ${attempt}/${maxRetries} för AI-gruppering...`, 'retry');
+          progressCallback?.(`🔄 Försök ${attempt}/${maxRetries} för AI-gruppering av kategori "${category}"...`, 'retry');
         }
-        return await this.groupRequirementsBatch(requirements);
+        progressCallback?.(`📡 Skickar ${requirements.length} krav i ett OpenAI-anrop för kategori "${category}"`, 'info');
+        return await this.groupRequirementsForCategory(category, requirements);
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Unknown error');
-        console.warn(`AI grouping attempt ${attempt} failed:`, lastError.message);
-        progressCallback?.(`⚠️ Försök ${attempt} misslyckades: ${lastError.message}`, 'warning');
-        
+        console.warn(`AI grouping attempt ${attempt} for category "${category}" failed:`, lastError.message);
+        progressCallback?.(`⚠️ Försök ${attempt} misslyckades för kategori "${category}": ${lastError.message}`, 'warning');
+
         if (attempt < maxRetries) {
           // Exponential backoff
           const delay = Math.pow(2, attempt) * 1000;
-          console.log(`Retrying in ${delay}ms...`);
-          progressCallback?.(`⏱️ Väntar ${delay}ms innan nytt försök...`, 'info');
+          console.log(`Retrying category "${category}" in ${delay}ms...`);
+          progressCallback?.(`⏱️ Väntar ${delay}ms innan nytt försök för kategori "${category}"...`, 'info');
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
     }
 
-    console.error(`All ${maxRetries} attempts failed, falling back to ungrouped:`, lastError?.message);
-    progressCallback?.(`❌ Alla ${maxRetries} försök misslyckades, lämnar krav ogrouperade`, 'error');
+    console.error(`All ${maxRetries} attempts failed for category "${category}", falling back to ungrouped:`, lastError?.message);
+    progressCallback?.(`❌ Alla ${maxRetries} försök misslyckades för kategori "${category}", lämnar krav ogrouperade`, 'error');
     
     // Fallback: return all requirements as ungrouped
     return {
@@ -182,114 +172,186 @@ export class OpenAIService {
     }
   }
 
-  private async groupRequirementsBatch(requirements: Requirement[]): Promise<GroupingResult> {
+  private async groupRequirementsForCategory(category: string, requirements: Requirement[]): Promise<GroupingResult> {
     try {
-      // Prepare requirements for analysis
-      const requirementTexts = requirements.map(req => ({
-        id: req.id,
-        text: req.text,
-        type: req.requirement_type,
-        category: req.requirement_category
-      }));
+      const knownRequirementIds = new Set(requirements.map(req => req.id));
 
-      const prompt = `Du är en expert på svensk upphandling och kravanalys. Analysera följande lista med IT-krav och gruppera dem baserat på mycket hög likhet inom SAMMA kategori.
-
-Krav att analysera:
-${requirementTexts.map((req, idx) => `${idx + 1}. [ID: ${req.id}] ${req.text} (Typ: ${req.type || 'Okänd'}, Kategori: ${req.category || 'Okänd'})`).join('\n')}
-
-KRITISKA INSTRUKTIONER:
-1. **ENDAST GRUPPERA KRAV INOM SAMMA KATEGORI** - Krav från olika kategorier får ALDRIG grupperas tillsammans
-2. **HÖG KÄNSLIGHET** - Gruppera endast krav som är nästan identiska eller extremt lika (80%+ likhet)
-3. **Strikt likhetsbedömning** - Krav måste ha mycket liknande ordval, struktur och specifik funktionalitet
-4. En grupp ska ha minst 2 krav för att vara meningsfull
-5. Välj det mest representativa kravet för varje grupp (tydligast formulerat)
-6. Beräkna en likhetspoäng 80-100 för varje grupp (under 80 ska ej grupperas)
-7. Använd exakt samma kategorinamn som anges för kraven
-
-Svara med JSON i följande format:
-{
-  "groups": [
-    {
-      "groupId": "grupp-1",
-      "representativeId": "krav-id-för-representativt-krav",
-      "members": ["krav-id-1", "krav-id-2", "krav-id-3"],
-      "similarityScore": 85,
-      "category": "Exakt samma kategorinamn från input"
-    }
-  ],
-  "ungroupedRequirements": ["krav-id-som-inte-passar-strikt-gruppering"]
-}
-
-VAR MYCKET SELEKTIV - Hellre för få grupper än för många. Lämna krav ogruperade om de inte uppfyller de höga kraven på likhet INOM SAMMA KATEGORI.`;
+      const payload = {
+        category,
+        instructions: {
+          similarityThreshold: 0.8,
+          minimumGroupSize: 2,
+          strictCategoryMatching: true,
+          coverageRequired: true,
+        },
+        requirements: requirements.map(req => ({
+          id: req.id,
+          text: req.text,
+          type: req.requirement_type,
+          category: req.requirement_category,
+        })),
+      };
 
       // Add timeout to prevent hanging
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-      
+      const timeoutId = setTimeout(() => controller.abort(), 150000); // 150 second timeout to allow full category coverage
+
       let response;
       try {
-        response = await openai.chat.completions.create({
+        response = await openai.responses.create({
           model: "gpt-5-nano",
-          messages: [
+          input: [
             {
               role: "system",
-              content: "Du är en expert på svensk IT-upphandling och kravanalys. Du analyserar tekniska krav och grupperar dem intelligent baserat på funktionalitet och teknikområde. Svara alltid med giltigt JSON."
+              content: [
+                {
+                  type: "text",
+                  text: "Du är en expert på svensk IT-upphandling och kravanalys. Du analyserar tekniska krav och grupperar dem intelligent baserat på funktionalitet och teknikområde. Svara alltid med giltigt JSON som uppfyller angivet schema.",
+                },
+              ],
             },
             {
               role: "user",
-              content: prompt
-            }
+              content: [
+                {
+                  type: "text",
+                  text: `Analysera samtliga krav i kategorin "${category}". Varje krav måste antingen placeras i en grupp eller återfinnas i listan över ogrouperade krav.`,
+                },
+                {
+                  type: "input_json",
+                  json: payload,
+                },
+              ],
+            },
           ],
-          response_format: { type: "json_object" },
-        }, { signal: controller.signal, timeout: 60000 });
+          temperature: 0.1,
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "grouping_response",
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  groups: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["representativeId", "members", "similarityScore", "category"],
+                      properties: {
+                        groupId: { type: "string" },
+                        representativeId: { type: "string" },
+                        members: {
+                          type: "array",
+                          items: { type: "string" },
+                          minItems: 2,
+                        },
+                        similarityScore: {
+                          type: "number",
+                          minimum: 0,
+                          maximum: 100,
+                        },
+                        category: { type: "string" },
+                      },
+                    },
+                  },
+                  ungroupedRequirements: {
+                    type: "array",
+                    items: { type: "string" },
+                  },
+                },
+                required: ["groups", "ungroupedRequirements"],
+              },
+            },
+          },
+        }, { signal: controller.signal, timeout: 150000 });
         clearTimeout(timeoutId);
       } catch (error) {
         clearTimeout(timeoutId);
-        if ((error as any).name === 'AbortError') {
-          throw new Error('OpenAI API call timed out after 60 seconds');
+        if ((error as any).name === "AbortError") {
+          throw new Error("OpenAI API call timed out efter 150 sekunder");
         }
         throw error;
       }
 
-      const result = JSON.parse(response.choices[0].message.content || '{}');
-      
-      // Validate and clean the result
-      const groups: RequirementGroup[] = (result.groups || [])
-        .filter((group: any) => 
-          group.representativeId && 
-          Array.isArray(group.members) && 
+      const result = this.extractJsonPayload(response) ?? {};
+      const assignedIds = new Set<string>();
+      const duplicateIds = new Set<string>();
+
+      const groups: RequirementGroup[] = (Array.isArray(result.groups) ? result.groups : [])
+        .filter((group: any) =>
+          group &&
+          group.representativeId &&
+          Array.isArray(group.members) &&
           group.members.length >= 2
         )
-        .map((group: any) => ({
-          groupId: this.generateUniqueGroupId(),
-          representativeId: group.representativeId,
-          members: group.members.filter((id: string) => 
-            requirements.some(req => req.id === id)
-          ),
-          similarityScore: Math.max(0, Math.min(100, group.similarityScore || 0)),
-          category: group.category || 'Okategoriserad'
-        }));
+        .map((group: any) => {
+          const candidateMembers: string[] = [
+            ...group.members.filter((id: string) => knownRequirementIds.has(id)),
+            group.representativeId,
+          ];
 
-      const ungroupedRequirements: string[] = (result.ungroupedRequirements || [])
-        .filter((id: string) => requirements.some(req => req.id === id));
+          const uniqueMembers: string[] = [];
+          for (const memberId of candidateMembers) {
+            if (!knownRequirementIds.has(memberId)) {
+              continue;
+            }
+            if (assignedIds.has(memberId)) {
+              duplicateIds.add(memberId);
+              continue;
+            }
+            assignedIds.add(memberId);
+            if (!uniqueMembers.includes(memberId)) {
+              uniqueMembers.push(memberId);
+            }
+          }
 
-      // Add any missing requirements to ungrouped
-      const groupedIds = new Set(groups.flatMap(g => g.members));
+          if (uniqueMembers.length < 2) {
+            // Not enough members left after sanitisation; drop the group entirely.
+            uniqueMembers.forEach(id => assignedIds.delete(id));
+            return null;
+          }
+
+          const representativeId = knownRequirementIds.has(group.representativeId) && uniqueMembers.includes(group.representativeId)
+            ? group.representativeId
+            : uniqueMembers[0];
+
+          const similarityScoreRaw = typeof group.similarityScore === "number" ? group.similarityScore : 0;
+          const similarityScore = similarityScoreRaw <= 1 ? Math.round(Math.max(0, Math.min(1, similarityScoreRaw)) * 100) : Math.round(Math.max(0, Math.min(100, similarityScoreRaw)));
+
+          return {
+            groupId: group.groupId ?? this.generateUniqueGroupId(),
+            representativeId,
+            members: uniqueMembers,
+            similarityScore,
+            category,
+          } satisfies RequirementGroup;
+        })
+        .filter((group): group is RequirementGroup => Boolean(group));
+
+      const ungroupedSet = new Set<string>(
+        (Array.isArray(result.ungroupedRequirements) ? result.ungroupedRequirements : [])
+          .filter((id: string) => knownRequirementIds.has(id))
+      );
+
+      duplicateIds.forEach(id => ungroupedSet.add(id));
+
       const missingIds = requirements
         .map(req => req.id)
-        .filter(id => !groupedIds.has(id) && !ungroupedRequirements.includes(id));
-      
-      ungroupedRequirements.push(...missingIds);
+        .filter(id => !assignedIds.has(id) && !ungroupedSet.has(id));
 
-      return { groups, ungroupedRequirements };
+      missingIds.forEach(id => ungroupedSet.add(id));
+
+      return { groups, ungroupedRequirements: Array.from(ungroupedSet) };
 
     } catch (error) {
       console.error("Error in AI grouping:", error as Error);
-      
+
       // Fallback: return all requirements as ungrouped
       return {
         groups: [],
-        ungroupedRequirements: requirements.map(req => req.id)
+        ungroupedRequirements: requirements.map(req => req.id),
       };
     }
   }
@@ -403,6 +465,82 @@ Skapa en sammanfattning på 2-3 meningar om grupperingsresultatet och dess nytta
       console.error("Error generating summary:", error);
       return 'Gruppering slutförd utan sammanfattning.';
     }
+  }
+
+  private extractJsonPayload(response: any): any | null {
+    if (!response) {
+      return null;
+    }
+
+    const tryParse = (payload: unknown) => {
+      if (typeof payload === "string" && payload.trim()) {
+        try {
+          return JSON.parse(payload);
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    };
+
+    const inspectContentArray = (content: any[]): any | null => {
+      for (const part of content ?? []) {
+        if (!part) {
+          continue;
+        }
+        if (part.type === "json" && part.json) {
+          return part.json;
+        }
+        if (typeof part.text === "string") {
+          const parsed = tryParse(part.text);
+          if (parsed) {
+            return parsed;
+          }
+        }
+      }
+      return null;
+    };
+
+    if (Array.isArray(response.output)) {
+      for (const block of response.output) {
+        if (!block) {
+          continue;
+        }
+        if (block.type === "output_json" && Array.isArray(block.content)) {
+          const parsed = inspectContentArray(block.content);
+          if (parsed) {
+            return parsed;
+          }
+        }
+        if (block.type === "output_text" && Array.isArray(block.content)) {
+          const parsed = inspectContentArray(block.content);
+          if (parsed) {
+            return parsed;
+          }
+        }
+      }
+    }
+
+    if (typeof response.output_text === "string") {
+      const parsed = tryParse(response.output_text);
+      if (parsed) {
+        return parsed;
+      }
+    }
+
+    if (response.response && typeof response.response.output_text === "string") {
+      const parsed = tryParse(response.response.output_text);
+      if (parsed) {
+        return parsed;
+      }
+    }
+
+    const choiceContent = response.choices?.[0]?.message?.content;
+    if (typeof choiceContent === "string") {
+      return tryParse(choiceContent);
+    }
+
+    return null;
   }
 }
 

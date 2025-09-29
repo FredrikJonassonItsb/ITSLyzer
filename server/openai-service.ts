@@ -18,7 +18,7 @@ export class OpenAIService {
    * Group similar requirements using AI analysis with retry and consolidation
    * Groups requirements per category with high sensitivity for similarity
    */
-  async groupRequirements(requirements: Requirement[]): Promise<GroupingResult> {
+  async groupRequirements(requirements: Requirement[], progressCallback?: (message: string, type?: string, step?: number, total?: number) => void): Promise<GroupingResult> {
     if (!requirements.length) {
       return { groups: [], ungroupedRequirements: [] };
     }
@@ -36,20 +36,31 @@ export class OpenAIService {
     const allGroups: RequirementGroup[] = [];
     const ungroupedRequirements: string[] = [];
 
+    progressCallback?.(`📊 Identifierat ${categoryGroups.size} kategorier att analysera`, 'info');
+
+    let processedCategories = 0;
+    const totalCategories = categoryGroups.size;
+
     // Process each category separately with high sensitivity
     for (const [category, categoryRequirements] of Array.from(categoryGroups.entries())) {
       console.log(`🏷️ Processing category: ${category} (${categoryRequirements.length} requirements)`);
+      progressCallback?.(`🏷️ Analyserar kategori: ${category} (${categoryRequirements.length} krav)`, 'progress', processedCategories + 1, totalCategories);
       
       // Skip categories with less than 2 requirements (can't group)
       if (categoryRequirements.length < 2) {
         ungroupedRequirements.push(...categoryRequirements.map(req => req.id));
+        progressCallback?.(`⏭️ Hoppar över kategori "${category}" - för få krav för gruppering`, 'info');
+        processedCategories++;
         continue;
       }
 
       // Process category in smaller batches for better quality
       const BATCH_SIZE = 20; // Smaller batches for higher quality within categories
+      const totalBatches = Math.ceil(categoryRequirements.length / BATCH_SIZE);
+      
       for (let i = 0; i < categoryRequirements.length; i += BATCH_SIZE) {
         const batch = categoryRequirements.slice(i, i + BATCH_SIZE);
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
         
         // Skip batches with less than 2 requirements
         if (batch.length < 2) {
@@ -57,7 +68,8 @@ export class OpenAIService {
           continue;
         }
 
-        const batchResult = await this.groupRequirementsBatchWithRetry(batch);
+        progressCallback?.(`🤖 AI-analyserar batch ${batchNumber}/${totalBatches} i kategori "${category}"`, 'progress');
+        const batchResult = await this.groupRequirementsBatchWithRetry(batch, progressCallback);
         
         // Generate unique group IDs for this batch
         batchResult.groups.forEach(group => {
@@ -68,33 +80,42 @@ export class OpenAIService {
         allGroups.push(...batchResult.groups);
         ungroupedRequirements.push(...batchResult.ungroupedRequirements);
       }
+      
+      processedCategories++;
     }
 
     console.log(`🎯 AI grouping completed: ${allGroups.length} groups across ${categoryGroups.size} categories`);
+    progressCallback?.(`🎯 Gruppering slutförd: ${allGroups.length} grupper skapade`, 'success');
     return { groups: allGroups, ungroupedRequirements };
   }
 
-  private async groupRequirementsBatchWithRetry(requirements: Requirement[], maxRetries: number = 2): Promise<GroupingResult> {
+  private async groupRequirementsBatchWithRetry(requirements: Requirement[], progressCallback?: (message: string, type?: string, step?: number, total?: number) => void, maxRetries: number = 2): Promise<GroupingResult> {
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`Attempting AI grouping (attempt ${attempt}/${maxRetries}) for ${requirements.length} requirements...`);
+        if (attempt > 1) {
+          progressCallback?.(`🔄 Försök ${attempt}/${maxRetries} för AI-gruppering...`, 'retry');
+        }
         return await this.groupRequirementsBatch(requirements);
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Unknown error');
         console.warn(`AI grouping attempt ${attempt} failed:`, lastError.message);
+        progressCallback?.(`⚠️ Försök ${attempt} misslyckades: ${lastError.message}`, 'warning');
         
         if (attempt < maxRetries) {
           // Exponential backoff
           const delay = Math.pow(2, attempt) * 1000;
           console.log(`Retrying in ${delay}ms...`);
+          progressCallback?.(`⏱️ Väntar ${delay}ms innan nytt försök...`, 'info');
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
     }
 
     console.error(`All ${maxRetries} attempts failed, falling back to ungrouped:`, lastError?.message);
+    progressCallback?.(`❌ Alla ${maxRetries} försök misslyckades, lämnar krav ogrouperade`, 'error');
     
     // Fallback: return all requirements as ungrouped
     return {

@@ -83,6 +83,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Global object to store SSE connections for progress updates
+  const sseConnections = new Set<Response>();
+
+  // AI Grouping Progress SSE endpoint
+  app.get("/api/requirements/grouping/progress", (req, res) => {
+    // Set headers for Server-Sent Events
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    // Add to connections set
+    sseConnections.add(res);
+
+    // Send initial connection message
+    res.write('data: {"type": "connected", "message": "Ansluten till AI-gruppering progress"}\n\n');
+
+    // Keep connection alive
+    const keepAlive = setInterval(() => {
+      if (!res.headersSent) return;
+      try {
+        res.write('data: {"type": "heartbeat"}\n\n');
+      } catch (error) {
+        clearInterval(keepAlive);
+        sseConnections.delete(res);
+      }
+    }, 30000);
+
+    // Clean up on close
+    req.on('close', () => {
+      clearInterval(keepAlive);
+      sseConnections.delete(res);
+    });
+
+    res.on('close', () => {
+      clearInterval(keepAlive);
+      sseConnections.delete(res);
+    });
+  });
+
+  // Helper function to broadcast progress to all SSE connections
+  function broadcastProgress(message: string, type: string = 'progress', step?: number, total?: number) {
+    const data = JSON.stringify({
+      type,
+      message,
+      step,
+      total,
+      timestamp: new Date().toISOString()
+    });
+    
+    const toRemove: Response[] = [];
+    sseConnections.forEach(res => {
+      try {
+        res.write(`data: ${data}\n\n`);
+      } catch (error) {
+        toRemove.push(res);
+      }
+    });
+    
+    // Remove failed connections
+    toRemove.forEach(res => sseConnections.delete(res));
+  }
+
   app.post("/api/requirements/grouping", async (req, res) => {
     try {
       console.log("📝 Manual AI grouping request received");
@@ -105,19 +171,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Perform AI-based grouping with extensive logging
+      // Perform AI-based grouping with extensive logging and progress broadcasting
       console.log(`🤖 Starting manual AI grouping for ${requirements.length} requirements...`);
       console.log("⏰ AI grouping process starting - this may take several minutes");
       
-      const groupingResult = await openaiService.groupRequirements(requirements);
+      broadcastProgress(`🤖 Startar AI-gruppering av ${requirements.length} krav...`, 'start');
+      broadcastProgress("⏰ Processen kan ta flera minuter beroende på antalet krav", 'info');
+      
+      const groupingResult = await openaiService.groupRequirements(requirements, broadcastProgress);
       console.log(`🎯 AI grouping completed: ${groupingResult.groups.length} groups found`);
+      
+      broadcastProgress(`🎯 AI-analys slutförd: ${groupingResult.groups.length} grupper identifierade`, 'success');
 
       // Clear all existing groupings first
       console.log("🧹 Clearing existing groupings...");
+      broadcastProgress("🧹 Rensar befintliga grupperingar...", 'progress');
       await storage.clearAllGroupings();
 
       // Update database with new grouping results
       console.log("💾 Updating database with grouping results...");
+      broadcastProgress("💾 Uppdaterar databas med grupperingsresultat...", 'progress');
       let updatedCount = 0;
       for (const group of groupingResult.groups) {
         // Mark representative requirement

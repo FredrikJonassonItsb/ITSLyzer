@@ -5,7 +5,7 @@ import { openaiService } from "./openai-service";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { z } from "zod";
-import { uploadExcelSchema, filterSchema, type InsertRequirement } from "@shared/schema";
+import { uploadExcelSchema, filterSchema, paginationSchema, type InsertRequirement } from "@shared/schema";
 import { generateRequirementKey } from "@shared/generateRequirementKey";
 import { randomUUID } from "crypto";
 
@@ -37,6 +37,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching requirements:", error);
       res.status(500).json({ error: "Kunde inte hämta krav" });
+    }
+  });
+
+  // Paginated Requirements API (optimized for performance)
+  app.get("/api/requirements/paginated", async (req, res) => {
+    try {
+      const filters = filterSchema.safeParse(req.query);
+      const pagination = paginationSchema.safeParse(req.query);
+      
+      const result = await storage.getAllRequirementsPaginated(
+        filters.success ? filters.data : undefined,
+        pagination.success ? pagination.data : undefined
+      );
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching paginated requirements:", error);
+      res.status(500).json({ error: "Kunde inte hämta krav" });
+    }
+  });
+
+  // Single requirement detail API
+  app.get("/api/requirements/:id", async (req, res) => {
+    try {
+      const requirement = await storage.getRequirement(req.params.id);
+      if (!requirement) {
+        return res.status(404).json({ error: "Kravet kunde inte hittas" });
+      }
+      res.json(requirement);
+    } catch (error) {
+      console.error("Error fetching requirement:", error);
+      res.status(500).json({ error: "Kunde inte hämta kravet" });
     }
   });
 

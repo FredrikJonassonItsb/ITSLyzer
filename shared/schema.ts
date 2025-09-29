@@ -59,6 +59,48 @@ export const filterSchema = z.object({
 
 export type FilterOptions = z.infer<typeof filterSchema>;
 
+// Pagination schema
+export const paginationSchema = z.object({
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(100).default(20),
+  sortBy: z.enum(["import_date", "text", "requirement_type", "user_status"]).default("import_date"),
+  sortOrder: z.enum(["asc", "desc"]).default("desc"),
+});
+
+export type PaginationOptions = z.infer<typeof paginationSchema>;
+
+// Lean requirement DTO for lists (minimal fields for performance)
+export const leanRequirementSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  requirement_type: z.string().nullable(),
+  requirement_category: z.string().nullable(),
+  user_status: z.string().nullable(),
+  user_comment: z.string().nullable(),
+  group_id: z.string().nullable(),
+  group_representative: z.boolean(),
+  similarity_score: z.number().nullable(),
+  categories: z.array(z.string()),
+  organizations: z.array(z.string()),
+  occurrences: z.number(),
+  import_organization: z.string(),
+  import_date: z.string().nullable(),
+  is_new: z.boolean(),
+});
+
+export type LeanRequirement = z.infer<typeof leanRequirementSchema>;
+
+// Paginated response schema
+export const paginatedRequirementsSchema = z.object({
+  requirements: z.array(leanRequirementSchema),
+  total: z.number(),
+  page: z.number(),
+  limit: z.number(),
+  totalPages: z.number(),
+});
+
+export type PaginatedRequirements = z.infer<typeof paginatedRequirementsSchema>;
+
 // Schema for statistics
 export const statisticsSchema = z.object({
   totalRequirements: z.number(),

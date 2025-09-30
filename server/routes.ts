@@ -10,6 +10,62 @@ import { generateRequirementKey } from "@shared/generateRequirementKey";
 import { randomUUID } from "crypto";
 import { categoryMappingService } from "./category-mapping-service";
 
+const REQUIREMENT_COLUMNS = [2, 3, 4, 5];
+const REQUIREMENT_KEYWORD_REGEX = /\b(ska|bör)\b/i;
+const SKALL_KEYWORD_REGEX = /\bska\b/i;
+const BOR_KEYWORD_REGEX = /\bbör\b/i;
+const REQUIREMENT_SKIP_PATTERNS = [
+  /leverantören ska beskriva/i,
+  /kraven i denna flik/i,
+  /denna flik/i,
+  /följande aktiviteter:/i,
+  /omfatta följande/i,
+  /informationssäkerhetskrav/i,
+  /konsekvensnivå/i,
+  /leverantören ska under avtalstiden erbjuda/i
+];
+
+function detectRequirement(row: any[]): { text: string; requirementType: "Skall" | "Bör" } | null {
+  for (const columnIndex of REQUIREMENT_COLUMNS) {
+    const cell = row[columnIndex];
+    const cellText = cell?.toString().trim() || "";
+
+    if (!cellText) continue;
+
+    const lowerValue = cellText.toLowerCase();
+    if (!REQUIREMENT_KEYWORD_REGEX.test(cellText)) continue;
+
+    if (REQUIREMENT_SKIP_PATTERNS.some(pattern => pattern.test(cellText))) continue;
+
+    const isHeaderLike =
+      lowerValue.startsWith("a.") ||
+      lowerValue.startsWith("b.") ||
+      lowerValue.startsWith("c.") ||
+      lowerValue.startsWith("d.") ||
+      lowerValue.startsWith("e.") ||
+      /^\d+\./.test(lowerValue) ||
+      /^[a-z]\d+/.test(lowerValue) ||
+      lowerValue.includes("denna flik") ||
+      lowerValue.includes("att betrakta som") ||
+      lowerValue.includes("leverantören ska under avtalstiden erbjuda");
+
+    if (isHeaderLike) continue;
+
+    let requirementType: "Skall" | "Bör" | "" = "";
+    if (SKALL_KEYWORD_REGEX.test(cellText)) {
+      requirementType = "Skall";
+    } else if (BOR_KEYWORD_REGEX.test(cellText)) {
+      requirementType = "Bör";
+    }
+
+    if (!requirementType) continue;
+
+    return { text: cellText, requirementType };
+  }
+
+  return null;
+}
+
 // Configure multer for file upload
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -582,78 +638,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           continue; // Skip empty rows
         }
 
-        // More restrictive requirement detection: Look for actual requirement sentences
-        let requirementText = '';
-        let requirementType = '';
-        let hasValidRequirement = false;
-
-        for (let j = 0; j < row.length; j++) {
-          const value = row[j]?.toString().trim() || '';
-          if (!value) continue;
-
-          // Check if this is a proper requirement sentence
-          const lowerValue = value.toLowerCase();
-          const containsKeyword = lowerValue.includes('ska') || 
-                                 lowerValue.includes('skall') || 
-                                 lowerValue.includes('bör') || 
-                                 lowerValue.includes('shall') || 
-                                 lowerValue.includes('should') ||
-                                 lowerValue.includes('must');
-
-          if (containsKeyword && value.length >= 30 && value.length <= 500) { // Reasonable requirement length
-            // Much more restrictive validation for actual requirement sentences
-            const wordCount = value.split(' ').length;
-            const sentences = value.split('.').length;
-            
-            const isProperRequirement = 
-              value.includes('.') && // Must have sentence ending
-              wordCount >= 5 && wordCount <= 100 && // Reasonable word count for a single requirement
-              sentences <= 5 && // Not too many sentences (avoid section descriptions)
-              !value.includes('\n\n') && // Not multi-paragraph text
-              !value.includes('Leverantören ska beskriva') && // Avoid meta-requirements about descriptions
-              !value.includes('Kraven i denna flik') && // Avoid section descriptions
-              !value.includes('följande aktiviteter:') && // Avoid activity lists
-              !value.includes('omfatta följande') && // Avoid enumeration introductions
-              !lowerValue.includes('informationssäkerhetskrav') && // Avoid general security descriptions
-              !lowerValue.includes('konsekvensnivå'); // Avoid classification descriptions
-
-            // More restrictive header exclusion
-            const isNotHeader = 
-              !lowerValue.startsWith('a.') && 
-              !lowerValue.startsWith('b.') && 
-              !lowerValue.startsWith('c.') &&
-              !lowerValue.startsWith('d.') &&
-              !lowerValue.startsWith('e.') &&
-              !lowerValue.match(/^\d+\./) && // Not numbered list header
-              !lowerValue.match(/^[a-z]\d+/) && // Not cell reference
-              !lowerValue.includes('denna flik') && // Not section description
-              !lowerValue.includes('att betrakta som') && // Not meta description
-              !lowerValue.includes('leverantören ska under avtalstiden erbjuda') && // Too general
-              wordCount >= 4 && wordCount <= 50; // More restrictive word count
-
-            if (isProperRequirement && isNotHeader) {
-              requirementText = value;
-              hasValidRequirement = true;
-              
-              // Determine requirement type from the text itself
-              if (lowerValue.includes('ska') || lowerValue.includes('skall') || lowerValue.includes('must') || lowerValue.includes('shall')) {
-                requirementType = 'Skall';
-              } else if (lowerValue.includes('bör') || lowerValue.includes('should') || lowerValue.includes('önskas')) {
-                requirementType = 'Bör';
-              }
-              break;
-            }
-          }
-        }
-
-        if (!hasValidRequirement) {
+        const detectedRequirement = detectRequirement(row);
+        if (!detectedRequirement) {
           continue; // Skip rows that don't contain valid requirements
         }
 
-        if (!requirementText) {
-          console.log('❌ Row rejected - no requirement text found despite keywords');
-          continue;
-        }
+        const { text: requirementText, requirementType } = detectedRequirement;
 
         // Find preceding category text - look backwards for non-requirement text
         let precedingCategoryText = '';
@@ -953,51 +943,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (let i = 0; i < enrichedData.length; i++) {
         const enrichedRow = enrichedData[i];
-        let requirementText = '';
-        let requirementType = '';
+        const detectedRequirement = detectRequirement(enrichedRow.data);
+        if (!detectedRequirement) continue;
 
-        // Extract requirement text and type (reuse existing logic)
-        for (const cell of enrichedRow.data) {
-          const cellText = cell?.toString().trim() || '';
-          
-          // Check if this cell contains requirement keywords
-          const hasRequirementKeywords = /\b(ska|skall|bör|shall|should|must)\b/i.test(cellText);
-          
-          if (hasRequirementKeywords && cellText.length > 30) {
-            requirementText = cellText;
-            
-            // Determine requirement type
-            if (/\b(ska|skall|shall|must)\b/i.test(cellText)) {
-              requirementType = 'Skall';
-            } else if (/\b(bör|should)\b/i.test(cellText)) {
-              requirementType = 'Bör';
-            }
-            break;
-          }
-        }
-
-        if (!requirementText || requirementText.length < 30) continue;
-
-        // Apply same filtering logic as import
-        const wordCount = requirementText.split(/\s+/).length;
-        const sentenceCount = (requirementText.match(/\./g) || []).length;
-        
-        // Skip if doesn't meet quality criteria
-        if (wordCount < 5 || wordCount > 100 || sentenceCount > 5) continue;
-        if (requirementText.length < 30 || requirementText.length > 500) continue;
-        
-        // Skip meta-requirements and section descriptions
-        const skipPatterns = [
-          /leverantören ska beskriva/i,
-          /kraven i denna flik/i,
-          /denna flik/i,
-          /följande aktiviteter:/i,
-          /omfatta följande/i,
-          /informationssäkerhetskrav/i,
-          /konsekvensnivå/i
-        ];
-        
-        if (skipPatterns.some(pattern => pattern.test(requirementText))) continue;
+        const { text: requirementText, requirementType } = detectedRequirement;
 
         // Find categories (sheet name + Column B)
         let precedingCategoryText = '';

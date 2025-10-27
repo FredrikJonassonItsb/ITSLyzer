@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+    <id>outlook_integrator</id>
+    <name>Outlook Integrator</name>
+    <summary>Integration between Microsoft Outlook and Nextcloud Talk/Calendar</summary>
+    <description><![CDATA[
+This app provides a REST API for integrating Microsoft Outlook with Nextcloud Talk and Calendar.
+
+Features:
+- Create Nextcloud Talk rooms from Outlook appointments
+- Synchronize calendar events between Outlook and Nextcloud
+- Advanced participant settings (authentication levels, secure email, notifications)
+- OAuth2 authentication support
+- CORS support for web-based Outlook add-ins
+
+This app is designed to work with the Outlook Add-in for Nextcloud Talk.
+    ]]></description>
+    
+    <version>1.0.0</version>
+    <licence>agpl</licence>
+    <author mail="support@itsl.se" homepage="https://itsl.se">ITSL</author>
+    
+    <namespace>OutlookIntegrator</namespace>
+    <category>integration</category>
+    <category>office</category>
+    
+    <website>https://github.com/FredrikJonassonItsb/ITSLyzer</website>
+    <bugs>https://github.com/FredrikJonassonItsb/ITSLyzer/issues</bugs>
+    <repository type="git">https://github.com/FredrikJonassonItsb/ITSLyzer</repository>
+    
+    <dependencies>
+        <nextcloud min-version="25" max-version="29"/>
+        <php min-version="8.0"/>
+    </dependencies>
+    
+    <types>
+        <authentication/>
+    </types>
+    
+    <settings>
+        <admin>OCA\OutlookIntegrator\Settings\AdminSettings</admin>
+    </settings>
+    
+    <navigations>
+    </navigations>
+</info>
+

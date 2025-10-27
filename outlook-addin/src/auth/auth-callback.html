@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://appsforoffice.microsoft.com;
+    connect-src 'self' https://demo.hubs.se;
+    style-src 'self' 'unsafe-inline';
+  ">
+  <title>Autentisering...</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+    }
+    .spinner {
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top: 4px solid white;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .error {
+      background: #e74c3c;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner"></div>
+    <h2>Autentiserar...</h2>
+    <p id="status">Vänligen vänta medan vi slutför inloggningen.</p>
+    <div id="error" class="error" style="display: none;"></div>
+  </div>
+
+  <!-- Office.js -->
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  
+  <!-- Konfiguration -->
+  <script src="../utils/config.js"></script>
+  
+  <script>
+    (function() {
+      'use strict';
+      
+      // Vänta på att Office.js laddas
+      Office.onReady(() => {
+        handleCallback();
+      });
+      
+      async function handleCallback() {
+        try {
+          // Hämta URL-parametrar
+          const urlParams = new URLSearchParams(window.location.search);
+          const code = urlParams.get('code');
+          const state = urlParams.get('state');
+          const error = urlParams.get('error');
+          const errorDescription = urlParams.get('error_description');
+          
+          // Kontrollera om det finns ett fel
+          if (error) {
+            throw new Error(errorDescription || error);
+          }
+          
+          // Kontrollera om vi har en authorization code
+          if (!code) {
+            throw new Error('Ingen authorization code mottagen');
+          }
+          
+          // Verifiera state
+          const savedState = sessionStorage.getItem('oauth_state');
+          if (state !== savedState) {
+            throw new Error('State mismatch - möjlig säkerhetsrisk');
+          }
+          
+          // Hämta code verifier
+          const codeVerifier = sessionStorage.getItem('oauth_code_verifier');
+          if (!codeVerifier) {
+            throw new Error('Code verifier saknas');
+          }
+          
+          // Uppdatera status
+          document.getElementById('status').textContent = 'Hämtar access token...';
+          
+          // Byt code mot tokens
+          const tokenUrl = CONFIG.NEXTCLOUD_URL + CONFIG.OAUTH.TOKEN_ENDPOINT;
+          const response = await fetch(tokenUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: new URLSearchParams({
+              grant_type: 'authorization_code',
+              code: code,
+              redirect_uri: CONFIG.OAUTH.REDIRECT_URI,
+              client_id: CONFIG.OAUTH.CLIENT_ID,
+              code_verifier: codeVerifier
+            })
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error('Token exchange failed: ' + errorText);
+          }
+          
+          const tokens = await response.json();
+          
+          // Rensa session storage
+          sessionStorage.removeItem('oauth_code_verifier');
+          sessionStorage.removeItem('oauth_state');
+          
+          // Skicka tokens tillbaka till huvudfönstret
+          Office.context.ui.messageParent(JSON.stringify(tokens));
+          
+        } catch (error) {
+          console.error('Callback error:', error);
+          
+          // Visa fel
+          document.querySelector('.spinner').style.display = 'none';
+          document.getElementById('status').textContent = 'Inloggning misslyckades';
+          const errorDiv = document.getElementById('error');
+          errorDiv.textContent = error.message;
+          errorDiv.style.display = 'block';
+          
+          // Skicka fel tillbaka till huvudfönstret
+          setTimeout(() => {
+            Office.context.ui.messageParent(JSON.stringify({
+              error: error.message
+            }));
+          }, 2000);
+        }
+      }
+    })();
+  </script>
+</body>
+</html>
+

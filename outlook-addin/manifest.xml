@@ -1,20 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<OfficeApp
-    xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
-    xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
-    xsi:type="MailApp">
-  
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" 
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" 
+           xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0" 
+           xsi:type="MailApp">
+
   <Id>a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d</Id>
   <Version>1.0.0.0</Version>
   <ProviderName>ITSL</ProviderName>
   <DefaultLocale>sv-SE</DefaultLocale>
   
   <DisplayName DefaultValue="Nextcloud Talk för Outlook" />
-  <Description DefaultValue="Skapa Nextcloud Talk-möten direkt från Outlook och synkronisera med Nextcloud Kalender" />
-  <IconUrl DefaultValue="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSI4IiBmaWxsPSIjNENBRjUwIi8+CiAgPGNpcmNsZSBjeD0iMzIiIGN5PSIyNCIgcj0iOCIgZmlsbD0id2hpdGUiLz4KICA8cGF0aCBkPSJNMjAgNDAgUTMyIDMyIDQ0IDQwIEw0NCA1NiBRMzIgNDggMjAgNTYgWiIgZmlsbD0id2hpdGUiLz4KICA8dGV4dCB4PSIzMiIgeT0iNTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI4IiBmaWxsPSIjNENBRjUwIiBmb250LXdlaWdodD0iYm9sZCI+TkM8L3RleHQ+Cjwvc3ZnPg==" />
-  <HighResolutionIconUrl DefaultValue="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgdmlld0JveD0iMCAwIDEyOCAxMjgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPHJlY3Qgd2lkdGg9IjEyOCIgaGVpZ2h0PSIxMjgiIHJ4PSIxNiIgZmlsbD0iIzRDQUY1MCIvPgogIDxjaXJjbGUgY3g9IjY0IiBjeT0iNDgiIHI9IjE2IiBmaWxsPSJ3aGl0ZSIvPgogIDxwYXRoIGQ9Ik00MCA4MCBRNjQgNjQgODggODAgTDg4IDExMiBRNjQgOTYgNDAgMTEyIFoiIGZpbGw9IndoaXRlIi8+CiAgPHRleHQgeD0iNjQiIHk9IjEwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE2IiBmaWxsPSIjNENBRjUwIiBmb250LXdlaWdodD0iYm9sZCI+TkM8L3RleHQ+Cjwvc3ZnPg==" />
+  <Description DefaultValue="Skapa Nextcloud Talk-möten direkt från Outlook" />
+  <IconUrl DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-64.svg" />
+  <HighResolutionIconUrl DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-128.svg" />
   
   <SupportUrl DefaultValue="https://itsl.se/support" />
   
@@ -89,39 +88,15 @@
               </Group>
             </OfficeTab>
           </ExtensionPoint>
-          
-          <ExtensionPoint xsi:type="AppointmentAttendeeCommandSurface">
-            <OfficeTab id="TabDefault">
-              <Group id="nextcloudAttendeeGroup">
-                <Label resid="GroupLabel" />
-                
-                <Control xsi:type="Button" id="createMeetingAttendeeButton">
-                  <Label resid="CreateMeetingButton.Label" />
-                  <Supertip>
-                    <Title resid="CreateMeetingButton.Label" />
-                    <Description resid="CreateMeetingButton.Tooltip" />
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.16x16" />
-                    <bt:Image size="32" resid="Icon.32x32" />
-                    <bt:Image size="80" resid="Icon.80x80" />
-                  </Icon>
-                  <Action xsi:type="ShowTaskpane">
-                    <SourceLocation resid="Taskpane.Url" />
-                  </Action>
-                </Control>
-              </Group>
-            </OfficeTab>
-          </ExtensionPoint>
         </DesktopFormFactor>
       </Host>
     </Hosts>
     
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHJ4PSIyIiBmaWxsPSIjNENBRjUwIi8+CiAgPGNpcmNsZSBjeD0iOCIgY3k9IjYiIHI9IjIiIGZpbGw9IndoaXRlIi8+CiAgPHRleHQgeD0iOCIgeT0iMTIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI0IiBmaWxsPSIjNENBRjUwIiBmb250LXdlaWdodD0iYm9sZCI+TkM8L3RleHQ+Cjwvc3ZnPg=="/>
-        <bt:Image id="Icon.32x32" DefaultValue="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI0IiBmaWxsPSIjNENBRjUwIi8+CiAgPGNpcmNsZSBjeD0iMTYiIGN5PSIxMiIgcj0iNCIgZmlsbD0id2hpdGUiLz4KICA8dGV4dCB4PSIxNiIgeT0iMjQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI4IiBmaWxsPSIjNENBRjUwIiBmb250LXdlaWdodD0iYm9sZCI+TkM8L3RleHQ+Cjwvc3ZnPg=="/>
-        <bt:Image id="Icon.80x80" DefaultValue="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iODAiIGhlaWdodD0iODAiIHJ4PSIxMCIgZmlsbD0iIzRDQUY1MCIvPgogIDxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjEwIiBmaWxsPSJ3aGl0ZSIvPgogIDx0ZXh0IHg9IjQwIiB5PSI2MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEwIiBmaWxsPSIjNENBRjUwIiBmb250LXdlaWdodD0iYm9sZCI+TkM8L3RleHQ+Cjwvc3ZnPg=="/>
+        <bt:Image id="Icon.16x16" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-16.svg"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-32.svg"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-64.svg"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Commands.Url" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/src/taskpane/taskpane.html" />
@@ -132,7 +107,7 @@
         <bt:String id="CreateMeetingButton.Label" DefaultValue="Skapa Talk-möte" />
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="CreateMeetingButton.Tooltip" DefaultValue="Skapa ett Nextcloud Talk-möte för denna kalenderhändelse och synkronisera med Nextcloud Kalender" />
+        <bt:String id="CreateMeetingButton.Tooltip" DefaultValue="Skapa ett Nextcloud Talk-möte för denna kalenderhändelse" />
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>

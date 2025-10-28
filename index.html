@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ITSLyzer Outlook Add-in</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .description {
+            text-align: center;
+            font-size: 1.2em;
+            margin-bottom: 40px;
+            line-height: 1.6;
+            opacity: 0.9;
+        }
+        
+        .download-section {
+            text-align: center;
+            margin: 40px 0;
+        }
+        
+        .download-btn {
+            display: inline-block;
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 50px;
+            font-size: 1.2em;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(45deg, #45a049, #4CAF50);
+        }
+        
+        .download-btn:active {
+            transform: translateY(0);
+        }
+        
+        .features {
+            margin-top: 40px;
+        }
+        
+        .features h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+        
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .feature-list li {
+            background: rgba(255, 255, 255, 0.1);
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .feature-list li::before {
+            content: "✓";
+            color: #4CAF50;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .instructions {
+            margin-top: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        .instructions h3 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        
+        .instructions ol {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin: 10px 0;
+            line-height: 1.5;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            opacity: 0.7;
+            font-size: 0.9em;
+        }
+        
+        .footer a {
+            color: #4CAF50;
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 ITSLyzer Outlook Add-in</h1>
+        
+        <div class="description">
+            Skapa Nextcloud Talk-möten direkt från Outlook och synkronisera med Nextcloud Kalender. 
+            En kraftfull integration som förenklar ditt arbetsflöde.
+        </div>
+        
+        <div class="download-section">
+            <a href="manifest.xml" class="download-btn" download="ITSLyzer-Outlook-Add-in.xml">
+                📥 Ladda ner Manifestfil
+            </a>
+        </div>
+        
+        <div class="features">
+            <h2>✨ Funktioner</h2>
+            <ul class="feature-list">
+                <li>Skapa Nextcloud Talk-möten direkt från Outlook</li>
+                <li>Automatisk synkronisering med Nextcloud Kalender</li>
+                <li>Säker OAuth2-autentisering</li>
+                <li>Stöd för både svenska och engelska</li>
+                <li>Enkel installation via manifestfil</li>
+                <li>Kompatibel med Outlook Web och Desktop</li>
+            </ul>
+        </div>
+        
+        <div class="instructions">
+            <h3>📋 Installationsinstruktioner</h3>
+            <ol>
+                <li>Klicka på "Ladda ner Manifestfil" ovan</li>
+                <li>Öppna Outlook Web (outlook.office.com)</li>
+                <li>Skapa eller öppna en kalenderhändelse</li>
+                <li>Klicka på "Hämta tillägg" → "Mina tillägg"</li>
+                <li>Välj "Lägg till från URL"</li>
+                <li>Ange: <code>https://fredrikjonassonitsb.github.io/ITSLyzer/outlook-addin/manifest.xml</code></li>
+                <li>Klicka "Lägg till" och följ autentiseringsprocessen</li>
+            </ol>
+        </div>
+        
+        <div class="footer">
+            <p>
+                Utvecklat av <a href="https://itsl.se" target="_blank">ITSL</a> | 
+                <a href="https://github.com/FredrikJonassonItsb/ITSLyzer" target="_blank">GitHub Repository</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

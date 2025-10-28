@@ -5,20 +5,20 @@
            xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
            xsi:type="MailApp">
   
-  <Id>a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d</Id>
+  <Id>f8c7d9e2-4a6b-4f3e-9d8c-1a2b3c4d5e6f</Id>
   <Version>1.0.0.0</Version>
-  <ProviderName>ITSL</ProviderName>
+  <ProviderName>ITSLyzer</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   
   <DisplayName DefaultValue="Nextcloud Talk for Outlook"/>
-  <Description DefaultValue="Create Nextcloud Talk meetings directly from Outlook and sync with Nextcloud Calendar"/>
+  <Description DefaultValue="Integrate Nextcloud Talk meetings and calendar with Outlook"/>
   
-  <IconUrl DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-64.svg"/>
-  <HighResolutionIconUrl DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-128.svg"/>
-  <SupportUrl DefaultValue="https://itsl.se/support"/>
+  <IconUrl DefaultValue="https://files.manuscdn.com/user_upload_by_module/session_file/310519663187405687/JDJlPqohbfeMBGyz.png"/>
+  <HighResolutionIconUrl DefaultValue="https://files.manuscdn.com/user_upload_by_module/session_file/310519663187405687/pjkLhIAdMBQspqSR.png"/>
+  <SupportUrl DefaultValue="https://github.com/FredrikJonassonItsb/outlook-nextcloud-talk-addin"/>
   
   <AppDomains>
-    <AppDomain>https://demo.hubs.se</AppDomain>
+    <AppDomain>https://files.manuscdn.com</AppDomain>
   </AppDomains>
   
   <Hosts>
@@ -34,8 +34,8 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/src/taskpane/taskpane.html"/>
-        <RequestedHeight>450</RequestedHeight>
+        <SourceLocation DefaultValue="https://files.manuscdn.com/user_upload_by_module/session_file/310519663187405687/safexGBCPlfjfmPV.html"/>
+        <RequestedHeight>250</RequestedHeight>
       </DesktopSettings>
     </Form>
   </FormSettings>
@@ -66,7 +66,7 @@
             
             <ExtensionPoint xsi:type="AppointmentOrganizerCommandSurface">
               <OfficeTab id="TabDefault">
-                <Group id="nextcloudGroup">
+                <Group id="msgReadGroup">
                   <Label resid="GroupLabel"/>
                   
                   <Control xsi:type="Button" id="msgReadOpenPaneButton">
@@ -85,6 +85,22 @@
                     </Action>
                   </Control>
                   
+                  <Control xsi:type="Button" id="ActionButton">
+                    <Label resid="ActionButton.Label"/>
+                    <Supertip>
+                      <Title resid="ActionButton.Label"/>
+                      <Description resid="ActionButton.Tooltip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon.16x16"/>
+                      <bt:Image size="32" resid="Icon.32x32"/>
+                      <bt:Image size="80" resid="Icon.80x80"/>
+                    </Icon>
+                    <Action xsi:type="ExecuteFunction">
+                      <FunctionName>addNextcloudMeeting</FunctionName>
+                    </Action>
+                  </Control>
+                  
                 </Group>
               </OfficeTab>
             </ExtensionPoint>
@@ -95,13 +111,13 @@
       
       <Resources>
         <bt:Images>
-          <bt:Image id="Icon.16x16" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-16.svg"/>
-          <bt:Image id="Icon.32x32" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-32.svg"/>
-          <bt:Image id="Icon.80x80" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-64.svg"/>
+          <bt:Image id="Icon.16x16" DefaultValue="https://files.manuscdn.com/user_upload_by_module/session_file/310519663187405687/KWnSEbdbxFwxfxXR.png"/>
+          <bt:Image id="Icon.32x32" DefaultValue="https://files.manuscdn.com/user_upload_by_module/session_file/310519663187405687/cjrpWwPnanIEFscp.png"/>
+          <bt:Image id="Icon.80x80" DefaultValue="https://files.manuscdn.com/user_upload_by_module/session_file/310519663187405687/JDJlPqohbfeMBGyz.png"/>
         </bt:Images>
         <bt:Urls>
-          <bt:Url id="Commands.Url" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/src/taskpane/taskpane.html"/>
-          <bt:Url id="Taskpane.Url" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/src/taskpane/taskpane.html"/>
+          <bt:Url id="Commands.Url" DefaultValue="https://files.manuscdn.com/user_upload_by_module/session_file/310519663187405687/PiMBYpOZfIaOdMXH.html"/>
+          <bt:Url id="Taskpane.Url" DefaultValue="https://files.manuscdn.com/user_upload_by_module/session_file/310519663187405687/safexGBCPlfjfmPV.html"/>
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="GroupLabel" DefaultValue="Nextcloud Talk">
@@ -110,10 +126,16 @@
           <bt:String id="TaskpaneButton.Label" DefaultValue="Show Taskpane">
             <bt:Override Locale="sv-SE" Value="Visa panelen"/>
           </bt:String>
+          <bt:String id="ActionButton.Label" DefaultValue="Add Nextcloud Meeting">
+            <bt:Override Locale="sv-SE" Value="Lägg till Nextcloud-möte"/>
+          </bt:String>
         </bt:ShortStrings>
         <bt:LongStrings>
           <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Opens the Nextcloud Talk taskpane">
             <bt:Override Locale="sv-SE" Value="Öppnar Nextcloud Talk-panelen"/>
+          </bt:String>
+          <bt:String id="ActionButton.Tooltip" DefaultValue="Add a Nextcloud Talk meeting to this appointment">
+            <bt:Override Locale="sv-SE" Value="Lägg till ett Nextcloud Talk-möte till denna händelse"/>
           </bt:String>
         </bt:LongStrings>
       </Resources>

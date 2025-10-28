@@ -31,8 +31,8 @@
   
   <!-- App Domains -->
   <AppDomains>
-    <AppDomain>https://fredrikjonassonitsb.github.io</AppDomain>
-    <AppDomain>https://demo.hubs.se</AppDomain>
+    <AppDomain>fredrikjonassonitsb.github.io</AppDomain>
+    <AppDomain>demo.hubs.se</AppDomain>
   </AppDomains>
   
   <!-- Hosts -->
@@ -105,7 +105,7 @@
                     <Icon>
                       <bt:Image size="16" resid="Icon.16x16"/>
                       <bt:Image size="32" resid="Icon.32x32"/>
-                      <bt:Image size="64" resid="Icon.64x64"/>
+                      <bt:Image size="80" resid="Icon.80x80"/>
                     </Icon>
                     <Action xsi:type="ShowTaskpane">
                       <SourceLocation resid="Taskpane.Url"/>
@@ -131,7 +131,7 @@
                     <Icon>
                       <bt:Image size="16" resid="Icon.16x16"/>
                       <bt:Image size="32" resid="Icon.32x32"/>
-                      <bt:Image size="64" resid="Icon.64x64"/>
+                      <bt:Image size="80" resid="Icon.80x80"/>
                     </Icon>
                     <Action xsi:type="ShowTaskpane">
                       <SourceLocation resid="Taskpane.Url"/>
@@ -152,7 +152,7 @@
         <bt:Images>
           <bt:Image id="Icon.16x16" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-16.svg"/>
           <bt:Image id="Icon.32x32" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-32.svg"/>
-          <bt:Image id="Icon.64x64" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-64.svg"/>
+          <bt:Image id="Icon.80x80" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-80.svg"/>
         </bt:Images>
         <bt:Urls>
           <bt:Url id="Commands.Url" DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/src/taskpane/taskpane.html"/>

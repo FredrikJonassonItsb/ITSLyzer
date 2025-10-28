@@ -8,10 +8,10 @@
   <Id>a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d</Id>
   <Version>1.0.0.0</Version>
   <ProviderName>ITSL</ProviderName>
-  <DefaultLocale>sv-SE</DefaultLocale>
+  <DefaultLocale>en-US</DefaultLocale>
   
-  <DisplayName DefaultValue="Nextcloud Talk för Outlook" />
-  <Description DefaultValue="Skapa Nextcloud Talk-möten direkt från Outlook" />
+  <DisplayName DefaultValue="Nextcloud Talk for Outlook" />
+  <Description DefaultValue="Create Nextcloud Talk meetings directly from Outlook" />
   <IconUrl DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-64.svg" />
   <HighResolutionIconUrl DefaultValue="https://fredrikjonassonitsb.github.io/ITSLyzer/assets/icons/icon-128.svg" />
   
@@ -104,10 +104,10 @@
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GroupLabel" DefaultValue="Nextcloud Talk" />
-        <bt:String id="CreateMeetingButton.Label" DefaultValue="Skapa Talk-möte" />
+        <bt:String id="CreateMeetingButton.Label" DefaultValue="Create Talk Meeting" />
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="CreateMeetingButton.Tooltip" DefaultValue="Skapa ett Nextcloud Talk-möte för denna kalenderhändelse" />
+        <bt:String id="CreateMeetingButton.Tooltip" DefaultValue="Create a Nextcloud Talk meeting for this calendar event" />
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
